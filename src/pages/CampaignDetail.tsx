@@ -49,7 +49,7 @@ export function CampaignDetailPage() {
   const addToast = useStore((s) => s.addToast)
 
   // API réelle
-  const { data: apiCampaigns, refresh: refreshCampaigns } = useCampaigns()
+  const { data: apiCampaigns } = useCampaigns()
   const { data: apiContacts } = useContactsApi()
   const mutations = useCampaignMutations()
   const campaigns = apiCampaigns || []

@@ -18,11 +18,7 @@ import {
   RefreshCw,
   Calendar,
   MapPin,
-  Users,
   Sparkles,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
   Clock,
 } from 'lucide-react'
 import {
@@ -39,9 +35,9 @@ import { Input, Textarea, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { cn } from '@/utils/cn'
-import { formatRelativeDate, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import { useStore } from '@/store/useStore'
-import { useInvitations, useInvitationMutations, useContacts as useContactsApi } from '@/hooks/useApi'
+import { useInvitations, useInvitationMutations } from '@/hooks/useApi'
 
 const typeLabels = {
   event: { label: 'Événement', icon: Sparkles, color: 'purple' },
@@ -51,29 +47,16 @@ const typeLabels = {
   reminder: { label: 'Rappel', icon: Clock, color: 'slate' },
 }
 
-const responseLabels: Record<string, { label: string; color: string; icon: any }> = {
-  accepted: { label: 'Accepté', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
-  declined: { label: 'Refusé', color: 'bg-red-100 text-red-700 border-red-200', icon: XCircle },
-  maybe: { label: 'Peut-être', color: 'bg-amber-100 text-amber-700 border-amber-200', icon: HelpCircle },
-  pending: { label: 'En attente', color: 'bg-slate-100 text-slate-700 border-slate-200', icon: Clock },
-}
-
 export function InvitationsPage() {
   // API réelle
   const { data: apiInvitations, loading, error, refresh } = useInvitations()
-  const { data: apiContacts } = useContactsApi()
   const mutations = useInvitationMutations()
   const addToast = useStore((s) => s.addToast)
 
   const invitations = apiInvitations || []
-  const contacts = apiContacts || []
-
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [selectedInv, setSelectedInv] = useState<any | null>(null)
-  const [responseContactId, setResponseContactId] = useState<number | null>(null)
-  const [responseType, setResponseType] = useState<'accepted' | 'declined' | 'maybe'>('accepted')
-
   // Loading state
   if (loading && invitations.length === 0) {
     return (

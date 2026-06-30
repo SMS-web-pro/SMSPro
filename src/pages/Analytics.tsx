@@ -5,7 +5,6 @@
  * Connecté à l'API Supabase
  */
 
-import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   TrendingUp,
@@ -34,7 +33,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { cn } from '@/utils/cn'
 import { formatCurrency, formatNumber, formatRelativeDate } from '@/lib/utils'
 import { useDashboardStats, useCampaigns } from '@/hooks/useApi'
 import { generateTimelineData } from '@/lib/mockData'

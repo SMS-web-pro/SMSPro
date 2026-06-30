@@ -12,7 +12,6 @@ import {
   Search,
   Copy,
   Trash2,
-  Edit2,
   Loader2,
   AlertCircle,
   RefreshCw,
@@ -27,12 +26,12 @@ import {
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Input, Textarea, Select } from '@/components/ui/Input'
+import { Input, Select } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { cn } from '@/utils/cn'
 import { formatCurrency } from '@/lib/utils'
 import { useStore } from '@/store/useStore'
-import { useCoupons, useCouponMutations, useContacts as useContactsApi, useSendSMS } from '@/hooks/useApi'
+import { useCoupons, useCouponMutations, useContacts as useContactsApi } from '@/hooks/useApi'
 
 const typeConfig = {
   percentage: { icon: Percent, label: 'Pourcentage', color: 'blue', example: '-20%' },
@@ -46,7 +45,6 @@ export function CouponsPage() {
   const { data: apiCoupons, loading, error, refresh } = useCoupons()
   const { data: apiContacts } = useContactsApi()
   const mutations = useCouponMutations()
-  const sendSMSHook = useSendSMS()
   const addToast = useStore((s) => s.addToast)
 
   const coupons = apiCoupons || []
@@ -55,7 +53,6 @@ export function CouponsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'inactive'>('all')
   const [showCreate, setShowCreate] = useState(false)
-  const [editingCoupon, setEditingCoupon] = useState<any | null>(null)
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [testCode, setTestCode] = useState('')
   const [testContactId, setTestContactId] = useState<number | null>(null)
@@ -491,7 +488,7 @@ function CouponStatusBadge({ coupon }: { coupon: any }) {
 }
 
 function CouponFormModal({
-  open,
+  open: _open,
   onClose,
   onSave,
 }: {
