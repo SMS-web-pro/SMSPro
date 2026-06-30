@@ -44,6 +44,23 @@ export function InboxPage() {
   const [filter, setFilter] = useState<Filter>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
+  // Filtrage et tri
+  const filteredMessages = useMemo(() => {
+    let msgs = [...messages]
+    if (filter === 'unread') msgs = msgs.filter((m) => !m.is_read && m.direction === 'inbound')
+    if (filter === 'auto') msgs = msgs.filter((m) => m.direction === 'inbound' && m.auto_reply_sent)
+    if (filter === 'manual') msgs = msgs.filter((m) => m.direction === 'inbound' && !m.auto_reply_sent)
+    if (search) {
+      msgs = msgs.filter(
+        (m) =>
+          m.phone.includes(search) || m.message.toLowerCase().includes(search.toLowerCase())
+      )
+    }
+    return msgs.sort(
+      (a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime()
+    )
+  }, [messages, filter, search])
+
   // Loading state
   if (loading && messages.length === 0) {
     return (
@@ -68,23 +85,6 @@ export function InboxPage() {
       </Card>
     )
   }
-
-  // Filtrage et tri
-  const filteredMessages = useMemo(() => {
-    let msgs = [...messages]
-    if (filter === 'unread') msgs = msgs.filter((m) => !m.is_read && m.direction === 'inbound')
-    if (filter === 'auto') msgs = msgs.filter((m) => m.direction === 'inbound' && m.auto_reply_sent)
-    if (filter === 'manual') msgs = msgs.filter((m) => m.direction === 'inbound' && !m.auto_reply_sent)
-    if (search) {
-      msgs = msgs.filter(
-        (m) =>
-          m.phone.includes(search) || m.message.toLowerCase().includes(search.toLowerCase())
-      )
-    }
-    return msgs.sort(
-      (a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime()
-    )
-  }, [messages, filter, search])
 
   const selected = messages.find((m) => m.id === selectedId)
   const selectedContact = selected ? contacts.find((c) => c.phone === selected.phone) : null

@@ -44,6 +44,17 @@ export function CampaignsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [view, setView] = useState<'grid' | 'list'>('grid')
 
+  // Filtrage et tri
+  const filtered = useMemo(() => {
+    return [...campaigns]
+      .filter((c) => {
+        const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase())
+        const matchStatus = statusFilter === 'all' || c.status === statusFilter
+        return matchSearch && matchStatus
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  }, [campaigns, search, statusFilter])
+
   // Loading state
   if (loading && campaigns.length === 0) {
     return (
@@ -68,17 +79,6 @@ export function CampaignsPage() {
       </Card>
     )
   }
-
-  // Filtrage et tri
-  const filtered = useMemo(() => {
-    return [...campaigns]
-      .filter((c) => {
-        const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase())
-        const matchStatus = statusFilter === 'all' || c.status === statusFilter
-        return matchSearch && matchStatus
-      })
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-  }, [campaigns, search, statusFilter])
 
   const sentCount = campaigns.filter((c) => c.status === 'sent').length
 

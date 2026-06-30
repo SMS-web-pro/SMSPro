@@ -57,29 +57,6 @@ export function InvitationsPage() {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [selectedInv, setSelectedInv] = useState<any | null>(null)
-  // Loading state
-  if (loading && invitations.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary-600 mb-3" />
-        <p className="text-sm text-slate-500">Chargement des invitations...</p>
-      </div>
-    )
-  }
-
-  if (error && invitations.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
-          <p className="text-sm text-red-700 mb-3">Erreur : {error}</p>
-          <Button onClick={refresh} size="sm" leftIcon={<RefreshCw className="h-4 w-4" />}>
-            Réessayer
-          </Button>
-        </CardContent>
-      </Card>
-    )
-  }
 
   // Filtrage
   const filtered = useMemo(() => {
@@ -104,6 +81,30 @@ export function InvitationsPage() {
       conversionRate: totalInvited > 0 ? (accepted / totalInvited) * 100 : 0,
     }
   }, [invitations])
+
+  // Loading state
+  if (loading && invitations.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600 mb-3" />
+        <p className="text-sm text-slate-500">Chargement des invitations...</p>
+      </div>
+    )
+  }
+
+  if (error && invitations.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
+          <p className="text-sm text-red-700 mb-3">Erreur : {error}</p>
+          <Button onClick={refresh} size="sm" leftIcon={<RefreshCw className="h-4 w-4" />}>
+            Réessayer
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
 
   const handleDelete = async (inv: any) => {
     if (!confirm(`Supprimer l'invitation "${inv.title}" ?`)) return
