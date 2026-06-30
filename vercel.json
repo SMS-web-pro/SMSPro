@@ -5,6 +5,12 @@
   "installCommand": "npm install",
   "framework": "vite",
   "regions": ["fra1"],
+  "rewrites": [
+    {
+      "source": "/((?!assets/|.*\\.).*)",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
