@@ -1,4 +1,4 @@
-// Supabase Edge Function : Envoi RÉEL de SMS via Twilio
+// Supabase Edge Function : Envoi RÉEL de SMS via Twilio ou Telnyx
 // Déployer avec : supabase functions deploy send-sms
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -52,6 +52,50 @@ async function sendTwilioSMS(
   }
 }
 
+// Client Telnyx via REST API (Edge Function compatible)
+async function sendTelnyxSMS(
+  to: string,
+  from: string,
+  body: string,
+  apiKey: string,
+) {
+  const url = 'https://api.telnyx.com/v2/messages'
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to,
+      text: body,
+    }),
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    return {
+      success: false,
+      error: data.errors?.[0]?.detail || data.message || 'Erreur Telnyx',
+      code: data.errors?.[0]?.code,
+    }
+  }
+
+  return {
+    success: true,
+    messageSid: data.data?.id,
+    status: data.data?.to?.[0]?.status,
+    to: data.data?.to?.[0]?.phone_number,
+    from: data.data?.from,
+    price: data.data?.cost?.amount,
+    errorCode: undefined,
+    errorMessage: undefined,
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
@@ -82,7 +126,69 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { campaignId, contactIds, message, senderNumber } = await req.json()
+    const body = await req.json()
+
+    // Test action: send a single test SMS
+    if (body.action === 'test') {
+      const { provider, testNumber } = body
+      if (!testNumber) {
+        return new Response(JSON.stringify({ error: 'Numéro de test requis' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      const { data: profile } = await supabase
+        .from('users')
+        .select('sms_config, twilio_config')
+        .eq('id', user.id)
+        .single()
+
+      const smsConfig = profile?.sms_config || profile?.twilio_config
+      const activeProvider = provider || smsConfig?.activeProvider || 'twilio'
+
+      let result: any
+
+      if (activeProvider === 'telnyx') {
+        const apiKey = smsConfig?.telnyx?.apiKey
+        const senderNumber = smsConfig?.telnyx?.senderNumber
+        if (!apiKey || !senderNumber) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Telnyx non configuré. Renseignez API Key et Numéro.',
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        result = await sendTelnyxSMS(testNumber, senderNumber, 'Test SMS depuis SMSPro ✓', apiKey)
+      } else {
+        const accountSid = smsConfig?.twilio?.accountSid
+        const authToken = smsConfig?.twilio?.authToken
+        const senderNumber = smsConfig?.twilio?.senderNumber
+        if (!accountSid || !authToken || !senderNumber) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Twilio non configuré. Renseignez SID, Token et Numéro.',
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        result = await sendTwilioSMS(testNumber, senderNumber, 'Test SMS depuis SMSPro ✓', accountSid, authToken)
+      }
+
+      return new Response(JSON.stringify({
+        success: result.success,
+        error: result.error || null,
+        provider: activeProvider,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    const { campaignId, contactIds, message, senderNumber } = body
 
     if (!contactIds || !Array.isArray(contactIds) || contactIds.length === 0) {
       return new Response(JSON.stringify({ error: 'contactIds requis' }), {
@@ -113,31 +219,44 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Récupérer la config Twilio de l'utilisateur
+    // Récupérer la config SMS de l'utilisateur
     const { data: profile } = await supabase
       .from('users')
-      .select('twilio_config')
+      .select('sms_config, twilio_config')
       .eq('id', user.id)
       .single()
 
-    const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')
-    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')
-    const defaultFrom = Deno.env.get('TWILIO_PHONE_NUMBER')
+    // Support migration: use sms_config, fallback to twilio_config
+    const smsConfig = profile?.sms_config || profile?.twilio_config
+    const activeProvider = smsConfig?.activeProvider || 'twilio'
 
-    const from = senderNumber || profile?.twilio_config?.senderNumber || defaultFrom
+    let from = ''
+    let providerConfig: any = null
 
-    if (!accountSid || !authToken || !from) {
-      return new Response(JSON.stringify({
-        error: 'Twilio non configuré. Configurez-le dans Paramètres → SMS & Twilio',
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+    if (activeProvider === 'telnyx') {
+      providerConfig = smsConfig?.telnyx
+      from = senderNumber || providerConfig?.senderNumber || ''
+      if (!providerConfig?.apiKey || !from) {
+        return new Response(JSON.stringify({
+          error: 'Telnyx non configuré. Configurez-le dans Paramètres → SMS',
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    } else {
+      // Default: Twilio
+      providerConfig = smsConfig?.twilio
+      from = senderNumber || providerConfig?.senderNumber || ''
+      if (!providerConfig?.accountSid || !providerConfig?.authToken || !from) {
+        return new Response(JSON.stringify({
+          error: 'Twilio non configuré. Configurez-le dans Paramètres → SMS',
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
     }
-
-    const projectUrl = Deno.env.get('SUPABASE_URL') || ''
-    const projectRef = projectUrl.split('//')[1]?.split('.')[0] || ''
-    const webhookUrl = `https://${projectRef}.supabase.co/functions/v1/twilio-status`
 
     // Envoyer les SMS un par un
     const results = []
@@ -148,14 +267,28 @@ Deno.serve(async (req) => {
         .replace(/\{nom\}/gi, contact.last_name || '')
         .replace(/\{ville\}/gi, contact.city || '')
 
-      const result = await sendTwilioSMS(
-        contact.phone,
-        from,
-        personalizedMessage,
-        accountSid,
-        authToken,
-        webhookUrl
-      )
+      let result: any
+
+      if (activeProvider === 'telnyx') {
+        result = await sendTelnyxSMS(
+          contact.phone,
+          from,
+          personalizedMessage,
+          providerConfig.apiKey,
+        )
+      } else {
+        const projectUrl = Deno.env.get('SUPABASE_URL') || ''
+        const projectRef = projectUrl.split('//')[1]?.split('.')[0] || ''
+        const webhookUrl = `https://${projectRef}.supabase.co/functions/v1/twilio-status`
+        result = await sendTwilioSMS(
+          contact.phone,
+          from,
+          personalizedMessage,
+          providerConfig.accountSid,
+          providerConfig.authToken,
+          webhookUrl
+        )
+      }
 
       // Enregistrer le log
       if (campaignId) {
