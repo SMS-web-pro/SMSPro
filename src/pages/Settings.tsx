@@ -27,6 +27,7 @@ import {
   Zap,
   Sparkles,
   Server,
+  Send,
 } from 'lucide-react'
 
 import { useStore } from '@/store/useStore'
@@ -40,11 +41,12 @@ import {
   saveSupabaseConfig,
   getCurrentSupabaseConfig,
 } from '@/lib/supabaseClient'
+import { testSMSConnection } from '@/lib/apiClient'
 
 const TABS = [
   { id: 'account', label: 'Compte & Entreprise', icon: User },
   { id: 'supabase', label: 'Connexion Supabase', icon: Server },
-  { id: 'sms', label: 'SMS & Twilio', icon: Smartphone },
+  { id: 'sms', label: 'SMS & Providers', icon: Smartphone },
   { id: 'database', label: 'Base de données', icon: Database },
   { id: 'security', label: 'Sécurité & RGPD', icon: Shield },
 ]
@@ -478,13 +480,20 @@ function Section({ icon: Icon, title, children }: { icon: any; title: string; ch
   )
 }
 
-// ====================== TAB: SMS / TWILIO ======================
+// ====================== TAB: SMS ======================
 function SMSTab() {
   const { addToast, isDemo } = useStore()
-  const [config, setConfig] = useState({
+  const [activeProvider, setActiveProvider] = useState<'twilio' | 'telnyx'>('twilio')
+  const [twilioConfig, setTwilioConfig] = useState({
     accountSid: '',
     authToken: '',
     senderNumber: '',
+    testNumber: '',
+  })
+  const [telnyxConfig, setTelnyxConfig] = useState({
+    apiKey: '',
+    senderNumber: '',
+    testNumber: '',
   })
   const [showSecrets, setShowSecrets] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -500,16 +509,43 @@ function SMSTab() {
       try {
         if (!isDemo && isSupabaseConfigured()) {
           const data = await fetchUserSettings()
-          if (data?.twilio_config) {
-            setConfig({
+          if (data?.sms_config) {
+            setActiveProvider(data.sms_config.activeProvider || 'twilio')
+            if (data.sms_config.twilio) {
+              setTwilioConfig({
+                accountSid: data.sms_config.twilio.accountSid || '',
+                authToken: data.sms_config.twilio.authToken || '',
+                senderNumber: data.sms_config.twilio.senderNumber || '',
+                testNumber: data.sms_config.twilio.testNumber || '',
+              })
+            }
+            if (data.sms_config.telnyx) {
+              setTelnyxConfig({
+                apiKey: data.sms_config.telnyx.apiKey || '',
+                senderNumber: data.sms_config.telnyx.senderNumber || '',
+                testNumber: data.sms_config.telnyx.testNumber || '',
+              })
+            }
+          } else if (data?.twilio_config) {
+            // Migration fallback
+            setTwilioConfig({
               accountSid: data.twilio_config.accountSid || '',
               authToken: data.twilio_config.authToken || '',
               senderNumber: data.twilio_config.senderNumber || '',
+              testNumber: '',
             })
           }
         } else {
           const saved = localStorage.getItem('smspro-settings-twilio')
-          if (saved) setConfig(JSON.parse(saved))
+          if (saved) {
+            const parsed = JSON.parse(saved)
+            setTwilioConfig({
+              accountSid: parsed.accountSid || '',
+              authToken: parsed.authToken || '',
+              senderNumber: parsed.senderNumber || '',
+              testNumber: parsed.testNumber || '',
+            })
+          }
         }
       } catch (err) {
         console.error(err)
@@ -518,32 +554,44 @@ function SMSTab() {
     load()
   }, [isDemo])
 
-  const isConfigured = config.accountSid && config.authToken && config.senderNumber
+  const isConfigured = activeProvider === 'twilio'
+    ? !!(twilioConfig.accountSid && twilioConfig.authToken && twilioConfig.senderNumber)
+    : !!(telnyxConfig.apiKey && telnyxConfig.senderNumber)
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      if (config.accountSid && !config.accountSid.startsWith('AC')) {
-        addToast({ type: 'error', title: 'Account SID invalide', description: 'Doit commencer par AC...' })
-        setSaving(false)
-        return
-      }
-      if (config.senderNumber && !/^\+\d{6,15}$/.test(config.senderNumber.replace(/[\s\-().]/g, ''))) {
-        addToast({ type: 'error', title: 'Numéro invalide', description: 'Format: +CCXXXXXXXXX' })
-        setSaving(false)
-        return
-      }
-      const twilioConfig = {
-        accountSid: config.accountSid,
-        authToken: config.authToken,
-        senderNumber: config.senderNumber,
-      }
-      if (isDemo || !isSupabaseConfigured()) {
-        localStorage.setItem('smspro-settings-twilio', JSON.stringify(twilioConfig))
+      if (activeProvider === 'twilio') {
+        if (twilioConfig.accountSid && !twilioConfig.accountSid.startsWith('AC')) {
+          addToast({ type: 'error', title: 'Account SID invalide', description: 'Doit commencer par AC...' })
+          setSaving(false)
+          return
+        }
+        if (twilioConfig.senderNumber && !/^\+\d{6,15}$/.test(twilioConfig.senderNumber.replace(/[\s\-().]/g, ''))) {
+          addToast({ type: 'error', title: 'Numéro invalide', description: 'Format: +CCXXXXXXXXX' })
+          setSaving(false)
+          return
+        }
       } else {
-        await updateUserSettings({ twilio_config: twilioConfig })
+        if (telnyxConfig.senderNumber && !/^\+\d{6,15}$/.test(telnyxConfig.senderNumber.replace(/[\s\-().]/g, ''))) {
+          addToast({ type: 'error', title: 'Numéro invalide', description: 'Format: +CCXXXXXXXXX' })
+          setSaving(false)
+          return
+        }
       }
-      addToast({ type: 'success', title: 'Configuration Twilio enregistrée' })
+
+      const smsConfig = {
+        activeProvider,
+        twilio: twilioConfig,
+        telnyx: telnyxConfig,
+      }
+
+      if (isDemo || !isSupabaseConfigured()) {
+        localStorage.setItem('smspro-settings-twilio', JSON.stringify(smsConfig))
+      } else {
+        await updateUserSettings({ sms_config: smsConfig })
+      }
+      addToast({ type: 'success', title: `Configuration ${activeProvider === 'twilio' ? 'Twilio' : 'Telnyx'} enregistrée` })
     } catch (err) {
       addToast({ type: 'error', title: 'Erreur', description: (err as Error).message })
     } finally {
@@ -552,14 +600,34 @@ function SMSTab() {
   }
 
   const handleTest = async () => {
-    if (!isConfigured) {
-      addToast({ type: 'error', title: 'Configuration incomplète', description: 'Renseignez SID, Token et numéro' })
+    const testNumber = activeProvider === 'twilio' ? twilioConfig.testNumber : telnyxConfig.testNumber
+    if (!testNumber) {
+      addToast({ type: 'error', title: 'Numéro de test requis', description: 'Entrez un numéro pour tester' })
       return
     }
+    if (!isConfigured) {
+      addToast({ type: 'error', title: 'Configuration incomplète', description: 'Renseignez les identifiants du provider' })
+      return
+    }
+
+    // Save before testing
+    await handleSave()
+
     setTesting(true)
-    await new Promise((r) => setTimeout(r, 1500))
-    setTesting(false)
-    addToast({ type: 'success', title: 'Connexion Twilio OK ✓', description: 'Vos identifiants sont valides' })
+    try {
+      const result = await testSMSConnection(activeProvider, testNumber)
+      if (result.error) {
+        addToast({ type: 'error', title: 'Échec du test', description: result.error })
+      } else if (result.data?.success) {
+        addToast({ type: 'success', title: `Test ${activeProvider === 'twilio' ? 'Twilio' : 'Telnyx'} réussi ✓`, description: `SMS envoyé au ${testNumber}` })
+      } else {
+        addToast({ type: 'error', title: 'Échec du test', description: result.data?.error || 'Erreur inconnue' })
+      }
+    } catch (err) {
+      addToast({ type: 'error', title: 'Erreur de test', description: (err as Error).message })
+    } finally {
+      setTesting(false)
+    }
   }
 
   const handleCopyWebhook = async () => {
@@ -571,73 +639,192 @@ function SMSTab() {
 
   return (
     <div className="space-y-6">
-      {/* Credentials Twilio */}
+      {/* Provider Selector */}
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Smartphone className="h-4 w-4 text-red-500" />
-                Configuration Twilio
-              </CardTitle>
-              <p className="text-xs text-slate-500 mt-1">
-                Service d'envoi SMS - Twilio Programmable Messaging
-              </p>
-            </div>
-            <StatusBadge status={isConfigured ? 'active' : 'inactive'} />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
-            label="Account SID"
-            value={config.accountSid}
-            onChange={(e) => setConfig({ ...config, accountSid: e.target.value })}
-            placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-            leftIcon={<KeyRound className="h-4 w-4" />}
-          />
-          <Input
-            label="Auth Token"
-            type={showSecrets ? 'text' : 'password'}
-            value={config.authToken}
-            onChange={(e) => setConfig({ ...config, authToken: e.target.value })}
-            placeholder="Votre token secret Twilio"
-            leftIcon={<Lock className="h-4 w-4" />}
-            rightIcon={
-              <button type="button" onClick={() => setShowSecrets(!showSecrets)}>
-                {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            }
-          />
-          <Input
-            label="Numéro de téléphone expéditeur"
-            value={config.senderNumber}
-            onChange={(e) => setConfig({ ...config, senderNumber: e.target.value })}
-            placeholder="+32470123456"
-            leftIcon={<PhoneIcon className="h-4 w-4" />}
-          />
-          <p className="text-xs text-slate-500">
-            💡 Format E.164 international. Exemples : 🇧🇪 +32, 🇫🇷 +33, 🇲🇦 +212, 🇨🇦 +1
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-blue-500" />
+            Fournisseur SMS
+          </CardTitle>
+          <p className="text-xs text-slate-500 mt-1">
+            Sélectionnez le service d'envoi de SMS à utiliser
           </p>
-
-          <div className="flex items-center gap-2 pt-2">
-            <Button
-              variant="outline"
-              onClick={handleTest}
-              loading={testing}
-              disabled={testing || !isConfigured}
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setActiveProvider('twilio')}
+              className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                activeProvider === 'twilio'
+                  ? 'border-red-500 bg-red-50 shadow-sm'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
             >
-              {testing ? 'Test en cours...' : 'Tester la connexion'}
-            </Button>
-            <Button
-              onClick={handleSave}
-              loading={saving}
-              leftIcon={saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  activeProvider === 'twilio' ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <Smartphone className="h-5 w-5" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-sm">Twilio</p>
+                  <p className="text-xs text-slate-500">180+ pays · $15 crédit gratuit</p>
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveProvider('telnyx')}
+              className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                activeProvider === 'telnyx'
+                  ? 'border-blue-500 bg-blue-50 shadow-sm'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
             >
-              {saving ? 'Enregistrement...' : 'Enregistrer'}
-            </Button>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  activeProvider === 'telnyx' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <Send className="h-5 w-5" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-sm">Telnyx</p>
+                  <p className="text-xs text-slate-500">190+ pays · $10 crédit gratuit</p>
+                </div>
+              </div>
+            </button>
           </div>
         </CardContent>
       </Card>
+
+      {/* Twilio Config */}
+      {activeProvider === 'twilio' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 text-red-500" />
+                  Configuration Twilio
+                </CardTitle>
+                <p className="text-xs text-slate-500 mt-1">
+                  Service d'envoi SMS - Twilio Programmable Messaging
+                </p>
+              </div>
+              <StatusBadge status={isConfigured ? 'active' : 'inactive'} />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              label="Account SID"
+              value={twilioConfig.accountSid}
+              onChange={(e) => setTwilioConfig({ ...twilioConfig, accountSid: e.target.value })}
+              placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              leftIcon={<KeyRound className="h-4 w-4" />}
+            />
+            <Input
+              label="Auth Token"
+              type={showSecrets ? 'text' : 'password'}
+              value={twilioConfig.authToken}
+              onChange={(e) => setTwilioConfig({ ...twilioConfig, authToken: e.target.value })}
+              placeholder="Votre token secret Twilio"
+              leftIcon={<Lock className="h-4 w-4" />}
+              rightIcon={
+                <button type="button" onClick={() => setShowSecrets(!showSecrets)}>
+                  {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              }
+            />
+            <Input
+              label="Numéro de téléphone expéditeur"
+              value={twilioConfig.senderNumber}
+              onChange={(e) => setTwilioConfig({ ...twilioConfig, senderNumber: e.target.value })}
+              placeholder="+32470123456"
+              leftIcon={<PhoneIcon className="h-4 w-4" />}
+            />
+            <Input
+              label="Numéro de test"
+              value={twilioConfig.testNumber}
+              onChange={(e) => setTwilioConfig({ ...twilioConfig, testNumber: e.target.value })}
+              placeholder="+212XXXXXXXXX"
+              leftIcon={<PhoneIcon className="h-4 w-4" />}
+            />
+            <p className="text-xs text-slate-500">
+              💡 Format E.164 international. Exemples : 🇧🇪 +32, 🇫🇷 +33, 🇲🇦 +212, 🇨🇦 +1
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Telnyx Config */}
+      {activeProvider === 'telnyx' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="h-4 w-4 text-blue-500" />
+                  Configuration Telnyx
+                </CardTitle>
+                <p className="text-xs text-slate-500 mt-1">
+                  Service d'envoi SMS - Telnyx Messaging API
+                </p>
+              </div>
+              <StatusBadge status={isConfigured ? 'active' : 'inactive'} />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              label="API Key"
+              type={showSecrets ? 'text' : 'password'}
+              value={telnyxConfig.apiKey}
+              onChange={(e) => setTelnyxConfig({ ...telnyxConfig, apiKey: e.target.value })}
+              placeholder="KEYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              leftIcon={<KeyRound className="h-4 w-4" />}
+              rightIcon={
+                <button type="button" onClick={() => setShowSecrets(!showSecrets)}>
+                  {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              }
+            />
+            <Input
+              label="Numéro de téléphone expéditeur"
+              value={telnyxConfig.senderNumber}
+              onChange={(e) => setTelnyxConfig({ ...telnyxConfig, senderNumber: e.target.value })}
+              placeholder="+14424511120"
+              leftIcon={<PhoneIcon className="h-4 w-4" />}
+            />
+            <Input
+              label="Numéro de test"
+              value={telnyxConfig.testNumber}
+              onChange={(e) => setTelnyxConfig({ ...telnyxConfig, testNumber: e.target.value })}
+              placeholder="+212XXXXXXXXX"
+              leftIcon={<PhoneIcon className="h-4 w-4" />}
+            />
+            <p className="text-xs text-slate-500">
+              💡 Format E.164 international. Obtenez votre API Key depuis portal.telnyx.com → Auth → API Keys
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          onClick={handleTest}
+          loading={testing}
+          disabled={testing || !isConfigured}
+        >
+          {testing ? 'Test en cours...' : 'Tester la connexion'}
+        </Button>
+        <Button
+          onClick={handleSave}
+          loading={saving}
+          leftIcon={saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        >
+          {saving ? 'Enregistrement...' : 'Enregistrer'}
+        </Button>
+      </div>
 
       {/* Webhook */}
       <Card>
@@ -647,12 +834,12 @@ function SMSTab() {
             Webhook Status Callback
           </CardTitle>
           <p className="text-xs text-slate-500 mt-1">
-            Reçoit les statuts en temps réel de Twilio (delivered, failed, etc.)
+            Reçoit les statuts en temps réel (delivered, failed, etc.)
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <p className="text-xs font-semibold text-slate-700 mb-2">URL à copier dans Twilio :</p>
+            <p className="text-xs font-semibold text-slate-700 mb-2">URL à copier dans votre console SMS :</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 block rounded bg-slate-900 text-slate-100 px-3 py-2 text-xs font-mono break-all">
                 {webhookUrl}
@@ -668,34 +855,37 @@ function SMSTab() {
             </div>
           </div>
 
-          <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
-            <p className="text-xs font-semibold text-blue-900 mb-2">📋 Configuration en 5 étapes :</p>
-            <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
-              <li>Connectez-vous sur <strong>console.twilio.com</strong></li>
-              <li>Allez dans <strong>Phone Numbers → Manage → Active numbers</strong></li>
-              <li>Cliquez sur votre numéro</li>
-              <li>Section <strong>"Messaging"</strong> → collez l'URL ci-dessus</li>
-              <li>Méthode : <strong>POST</strong> → <strong>Save</strong></li>
-            </ol>
-          </div>
+          {activeProvider === 'twilio' && (
+            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+              <p className="text-xs font-semibold text-blue-900 mb-2">📋 Configuration Twilio :</p>
+              <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
+                <li>Connectez-vous sur <strong>console.twilio.com</strong></li>
+                <li>Allez dans <strong>Phone Numbers → Manage → Active numbers</strong></li>
+                <li>Cliquez sur votre numéro</li>
+                <li>Section <strong>"Messaging"</strong> → collez l'URL ci-dessus</li>
+                <li>Méthode : <strong>POST</strong> → <strong>Save</strong></li>
+              </ol>
+            </div>
+          )}
+
+          {activeProvider === 'telnyx' && (
+            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+              <p className="text-xs font-semibold text-blue-900 mb-2">📋 Configuration Telnyx :</p>
+              <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
+                <li>Connectez-vous sur <strong>portal.telnyx.com</strong></li>
+                <li>Allez dans <strong>Messaging → Messaging Profiles</strong></li>
+                <li>Cliquez sur votre profil</li>
+                <li>Onglet <strong>"Inbound"</strong> → collez l'URL ci-dessus</li>
+                <li><strong>Save</strong></li>
+              </ol>
+            </div>
+          )}
 
           <div className="rounded-lg bg-purple-50 border border-purple-200 p-4">
             <p className="text-xs font-semibold text-purple-900 mb-2">🚀 Déploiement de la fonction :</p>
-            <p className="text-xs text-purple-800 mb-2">
-              Le webhook pointe vers une Supabase Edge Function qui met à jour la table <code className="bg-purple-100 px-1 rounded">sms_logs</code>.
-            </p>
-            <code className="block bg-purple-100 px-3 py-2 rounded text-xs font-mono text-purple-900 mb-2">
-              supabase functions deploy twilio-status
+            <code className="block bg-purple-100 px-3 py-2 rounded text-xs font-mono text-purple-900">
+              supabase functions deploy send-sms
             </code>
-            <a
-              href="https://supabase.com/docs/guides/functions/deploy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-medium text-purple-900 hover:text-purple-700"
-            >
-              Documentation
-              <ExternalLink className="h-3 w-3" />
-            </a>
           </div>
         </CardContent>
       </Card>
