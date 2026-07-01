@@ -412,10 +412,15 @@ export function useSendSMS() {
     } else if (result.data) {
       if (result.data.failed > 0 && result.data.sent === 0) {
         const firstError = result.data.results?.find((r: any) => r.error)?.error || 'Échoué'
+        const hint = firstError.includes('unverified')
+          ? ' Compte Twilio trial : vérifiez le numéro dans Twilio Console.'
+          : firstError.includes('Telnyx')
+          ? ' Vérifiez votre API Key et numéro dans Paramètres → SMS.'
+          : ''
         addToast({
           type: 'error',
           title: 'Échec d\'envoi',
-          description: `${result.data.failed} SMS échoué(s). ${firstError.includes('unverified') ? 'Compte Twilio trial : vérifiez le numéro dans Twilio Console → Phone Numbers → Verified Caller IDs.' : firstError}`,
+          description: `${result.data.failed} SMS échoué(s).${hint}`,
         })
       } else if (result.data.failed > 0) {
         addToast({
