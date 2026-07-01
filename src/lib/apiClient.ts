@@ -73,7 +73,7 @@ async function callFunction<T>(name: string, body?: any): Promise<{ data: T | nu
 }
 
 // =====================================================
-// SMS - Envoi réel via Twilio
+// SMS - Envoi réel via Twilio ou Telnyx
 // =====================================================
 
 export interface SendSMSResult {
@@ -102,6 +102,20 @@ export async function sendSMS(
     message,
     campaignId: options?.campaignId,
     senderNumber: options?.senderNumber,
+  })
+}
+
+/**
+ * Teste la connexion SMS avec un provider donné
+ */
+export async function testSMSConnection(
+  provider: 'twilio' | 'telnyx',
+  testNumber: string
+): Promise<{ data: { success: boolean; error?: string; provider: string } | null; error: string | null }> {
+  return callFunction<{ success: boolean; error?: string; provider: string }>('send-sms', {
+    action: 'test',
+    provider,
+    testNumber,
   })
 }
 
