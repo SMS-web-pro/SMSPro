@@ -410,11 +410,26 @@ export function useSendSMS() {
     if (result.error) {
       addToast({ type: 'error', title: 'Erreur d\'envoi', description: result.error })
     } else if (result.data) {
-      addToast({
-        type: 'success',
-        title: 'Campagne envoyée',
-        description: `✓ ${result.data.sent} envoyés · ✗ ${result.data.failed} échoués`,
-      })
+      if (result.data.failed > 0 && result.data.sent === 0) {
+        const firstError = result.data.results?.find((r: any) => r.error)?.error || 'Échoué'
+        addToast({
+          type: 'error',
+          title: 'Échec d\'envoi',
+          description: `${result.data.failed} SMS échoué(s). ${firstError.includes('unverified') ? 'Compte Twilio trial : vérifiez le numéro dans Twilio Console → Phone Numbers → Verified Caller IDs.' : firstError}`,
+        })
+      } else if (result.data.failed > 0) {
+        addToast({
+          type: 'warning',
+          title: 'Envoi partiel',
+          description: `✓ ${result.data.sent} envoyés · ✗ ${result.data.failed} échoués`,
+        })
+      } else {
+        addToast({
+          type: 'success',
+          title: 'Campagne envoyée',
+          description: `✓ ${result.data.sent} SMS envoyés avec succès`,
+        })
+      }
     }
     return result
   }
