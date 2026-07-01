@@ -3,6 +3,19 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+function jsonResponse(data: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+  })
+}
+
 // Client Twilio via REST API (Edge Function compatible)
 async function sendTwilioSMS(
   to: string,
@@ -98,13 +111,7 @@ async function sendTelnyxSMS(
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    })
+    return new Response('ok', { headers: CORS_HEADERS })
   }
 
   try {
@@ -120,10 +127,7 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabase.auth.getUser()
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Non authentifié' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: 'Non authentifié' }, 401)
     }
 
     const body = await req.json()
@@ -132,10 +136,7 @@ Deno.serve(async (req) => {
     if (body.action === 'test') {
       const { provider, testNumber } = body
       if (!testNumber) {
-        return new Response(JSON.stringify({ error: 'Numéro de test requis' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ error: 'Numéro de test requis' }, 400)
       }
 
       const { data: profile } = await supabase
@@ -153,12 +154,9 @@ Deno.serve(async (req) => {
         const apiKey = smsConfig?.telnyx?.apiKey
         const senderNumber = smsConfig?.telnyx?.senderNumber
         if (!apiKey || !senderNumber) {
-          return new Response(JSON.stringify({
+          return jsonResponse({
             success: false,
             error: 'Telnyx non configuré. Renseignez API Key et Numéro.',
-          }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
           })
         }
         result = await sendTelnyxSMS(testNumber, senderNumber, 'Test SMS depuis SMSPro ✓', apiKey)
@@ -167,41 +165,29 @@ Deno.serve(async (req) => {
         const authToken = smsConfig?.twilio?.authToken
         const senderNumber = smsConfig?.twilio?.senderNumber
         if (!accountSid || !authToken || !senderNumber) {
-          return new Response(JSON.stringify({
+          return jsonResponse({
             success: false,
             error: 'Twilio non configuré. Renseignez SID, Token et Numéro.',
-          }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
           })
         }
         result = await sendTwilioSMS(testNumber, senderNumber, 'Test SMS depuis SMSPro ✓', accountSid, authToken)
       }
 
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: result.success,
         error: result.error || null,
         provider: activeProvider,
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
       })
     }
 
     const { campaignId, contactIds, message, senderNumber } = body
 
     if (!contactIds || !Array.isArray(contactIds) || contactIds.length === 0) {
-      return new Response(JSON.stringify({ error: 'contactIds requis' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: 'contactIds requis' }, 400)
     }
 
     if (!message) {
-      return new Response(JSON.stringify({ error: 'message requis' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: 'message requis' }, 400)
     }
 
     // Récupérer les contacts
@@ -213,10 +199,7 @@ Deno.serve(async (req) => {
       .eq('opted_in', true)
 
     if (contactsError) {
-      return new Response(JSON.stringify({ error: contactsError.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: contactsError.message }, 500)
     }
 
     // Récupérer la config SMS de l'utilisateur
@@ -237,24 +220,18 @@ Deno.serve(async (req) => {
       providerConfig = smsConfig?.telnyx
       from = senderNumber || providerConfig?.senderNumber || ''
       if (!providerConfig?.apiKey || !from) {
-        return new Response(JSON.stringify({
+        return jsonResponse({
           error: 'Telnyx non configuré. Configurez-le dans Paramètres → SMS',
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        }, 400)
       }
     } else {
       // Default: Twilio
       providerConfig = smsConfig?.twilio
       from = senderNumber || providerConfig?.senderNumber || ''
       if (!providerConfig?.accountSid || !providerConfig?.authToken || !from) {
-        return new Response(JSON.stringify({
+        return jsonResponse({
           error: 'Twilio non configuré. Configurez-le dans Paramètres → SMS',
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        }, 400)
       }
     }
 
@@ -318,26 +295,14 @@ Deno.serve(async (req) => {
     const successCount = results.filter((r) => r.success).length
     const failedCount = results.length - successCount
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        total: results.length,
-        sent: successCount,
-        failed: failedCount,
-        results,
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      }
-    )
-  } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    return jsonResponse({
+      success: true,
+      total: results.length,
+      sent: successCount,
+      failed: failedCount,
+      results,
     })
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 500)
   }
 })
