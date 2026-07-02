@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom'
 import { getInitials } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { useInbox } from '@/hooks/useApi'
 
 export function Header() {
   const {
@@ -30,6 +31,11 @@ export function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const navigate = useNavigate()
+
+  // Real-time inbox unread count
+  const { data: inboxData } = useInbox()
+  const inboxMessages = inboxData || []
+  const unreadCount = inboxMessages.filter((m: any) => !m.is_read && m.direction === 'inbound').length
 
   const handleLogout = () => {
     if (isDemo) {
@@ -50,24 +56,26 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-20 bg-white border-b border-slate-200 backdrop-blur supports-[backdrop-filter]:bg-white/95">
-      <div className="flex h-16 items-center gap-4 px-4 lg:px-8">
-        <button
-          onClick={toggleSidebar}
-          className="lg:hidden rounded-lg p-2 hover:bg-slate-100"
-          aria-label="Ouvrir le menu"
-        >
-          <Menu className="h-5 w-5 text-slate-700" />
-        </button>
+      <div className="flex h-[72px] items-center justify-between gap-4 px-4 lg:px-8">
+        {/* Left: Hamburger + Demo banner */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={toggleSidebar}
+            className="lg:hidden rounded-lg p-2 hover:bg-slate-100"
+            aria-label="Ouvrir le menu"
+          >
+            <Menu className="h-5 w-5 text-slate-700" />
+          </button>
 
-        {/* Mode Démo Banner */}
-        {isDemo && (
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-300">
-            <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-            <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">Mode Démo</span>
-          </div>
-        )}
+          {isDemo && (
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-300">
+              <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">Mode Démo</span>
+            </div>
+          )}
+        </div>
 
-        {/* Search */}
+        {/* Center: Search */}
         <div className="relative flex-1 max-w-xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
@@ -77,15 +85,14 @@ export function Header() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Boutons mode démo */}
+        {/* Right: Demo buttons + Notification bell + Profile */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           {isDemo && (
             <>
               <button
                 onClick={() => setShowResetConfirm(true)}
                 className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
                 title="Réinitialiser les données de démo"
-                aria-label="Réinitialiser"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Réinitialiser
@@ -94,7 +101,6 @@ export function Header() {
                 onClick={handleLogout}
                 className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
                 title="Quitter le mode démo"
-                aria-label="Quitter la démo"
               >
                 <X className="h-3.5 w-3.5" />
                 Quitter
@@ -102,13 +108,18 @@ export function Header() {
             </>
           )}
 
-          {/* Notifications */}
+          {/* Notifications - connected to inbox */}
           <button
-            className="relative rounded-lg p-2 hover:bg-slate-100"
-            aria-label="Notifications"
+            onClick={() => navigate('/inbox')}
+            className="relative rounded-lg p-2 hover:bg-slate-100 transition-colors"
+            aria-label={`Notifications - ${unreadCount} non lus`}
           >
             <Bell className="h-5 w-5 text-slate-600" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
 
           {/* Profile dropdown */}
@@ -178,7 +189,6 @@ export function Header() {
         </div>
       </div>
 
-      {/* Modal de confirmation pour réinitialiser */}
       <Modal
         open={showResetConfirm}
         onClose={() => setShowResetConfirm(false)}

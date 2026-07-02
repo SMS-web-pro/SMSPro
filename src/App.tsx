@@ -15,7 +15,6 @@ import { CouponsPage } from '@/pages/Coupons'
 import { InvitationsPage } from '@/pages/Invitations'
 import InvitationPublicPage from '@/pages/InvitationPublic'
 import { UserGuidePage } from '@/pages/UserGuide'
-import { SetupWizardPage } from '@/pages/SetupWizard'
 import { useStore } from '@/store/useStore'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
@@ -39,7 +38,6 @@ export default function App() {
           {/* Routes publiques */}
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
-          <Route path="/setup" element={<SetupWizardPage />} />
           <Route path="/i/:token" element={<InvitationPublicPage />} />
 
           {/* Routes protégées */}
