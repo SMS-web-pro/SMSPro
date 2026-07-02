@@ -267,21 +267,22 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Enregistrer le log
-      if (campaignId) {
-        await supabase.from('sms_logs').insert({
-          campaign_id: campaignId,
-          contact_id: contact.id,
-          phone: contact.phone,
-          message: personalizedMessage,
-          message_sid: result.messageSid,
-          status: result.success ? 'sent' : 'failed',
-          error_code: result.code,
-          error_message: result.error,
-          cost: result.price ? Math.abs(parseFloat(result.price)) : 0.08,
-          sent_at: new Date().toISOString(),
-        })
+      // Enregistrer le log (toujours, même sans campagne)
+      const logEntry: any = {
+        contact_id: contact.id,
+        phone: contact.phone,
+        message: personalizedMessage,
+        message_sid: result.messageSid,
+        status: result.success ? 'sent' : 'failed',
+        error_code: result.code,
+        error_message: result.error,
+        cost: result.price ? Math.abs(parseFloat(result.price)) : 0.08,
+        sent_at: new Date().toISOString(),
       }
+      if (campaignId) {
+        logEntry.campaign_id = campaignId
+      }
+      await supabase.from('sms_logs').insert(logEntry)
 
       results.push({
         contactId: contact.id,

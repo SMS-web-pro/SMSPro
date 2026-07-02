@@ -3,14 +3,24 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'content-type',
+}
+
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS_HEADERS })
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS })
   }
 
   try {
@@ -23,13 +33,13 @@ Deno.serve(async (req) => {
     } else if (contentType.includes('application/json')) {
       payload = await req.json()
     } else {
-      return new Response('Unsupported content type', { status: 400 })
+      return new Response('Unsupported content type', { status: 400, headers: CORS_HEADERS })
     }
 
-    console.log('Twilio webhook:', payload)
+    console.log('Twilio webhook:', JSON.stringify(payload))
 
     if (!payload.MessageSid || !payload.MessageStatus) {
-      return new Response('Missing required fields', { status: 400 })
+      return new Response('Missing required fields', { status: 400, headers: CORS_HEADERS })
     }
 
     const status = payload.MessageStatus.toLowerCase()
@@ -52,7 +62,7 @@ Deno.serve(async (req) => {
       console.error('Update error:', error)
       return new Response(JSON.stringify({ error: error.message }), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       })
     }
 
@@ -64,13 +74,13 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     })
   } catch (error) {
     console.error('Webhook error:', error)
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
+      { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
     )
   }
 })
