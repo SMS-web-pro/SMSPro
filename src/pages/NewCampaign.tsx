@@ -186,6 +186,9 @@ export function NewCampaignPage() {
             title: 'Campagne créée mais erreur d\'envoi',
             description: result.error,
           })
+        } else {
+          // Mettre à jour le statut de la campagne à "sent"
+          await mutations.update(campaign.id, { status: 'sent', sent_at: new Date().toISOString() })
         }
         // Le toast de succès est géré par useSendSMS
       } else {

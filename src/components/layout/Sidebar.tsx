@@ -30,7 +30,6 @@ const navItems = [
 const quickLinks = [
   { to: '/analytics', icon: BarChart3, label: 'Rapports' },
   { to: '/settings', icon: Settings, label: 'Paramètres' },
-  { to: '/contacts?action=import', icon: Users, label: 'Importer contacts' },
   { to: '/user-guide', icon: BookOpen, label: "Mode d'emploi" },
 ]
 

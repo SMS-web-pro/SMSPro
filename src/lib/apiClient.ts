@@ -213,6 +213,20 @@ export async function deleteCampaignAPI(id: number) {
   return { data: null, error: error?.message || null }
 }
 
+export async function updateCampaignAPI(id: number, updates: Partial<any>) {
+  const client = getSupabase()
+  if (!client) return { data: null, error: 'Supabase non configuré' }
+
+  const { data, error } = await client
+    .from('campaigns')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  return { data, error: error?.message || null }
+}
+
 // =====================================================
 // AUTO-REPLY
 // =====================================================

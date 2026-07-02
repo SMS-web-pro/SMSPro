@@ -25,6 +25,7 @@ import {
   fetchSegmentsAPI,
   createContactAPI,
   createCampaignAPI,
+  updateCampaignAPI,
   createAutoReplyAPI,
   createCouponAPI,
   createInvitationAPI,
@@ -297,10 +298,14 @@ export function useCampaignMutations() {
         addToast({ type: 'success', title: 'Campagne envoyée (simulation démo)' })
         return { data: null, error: null }
       }
-      // En production, l'envoi passe par la page de campagne qui collecte les contactIds
-      // Ici on simule juste le trigger
       addToast({ type: 'info', title: 'Utilisez la page de campagne pour envoyer' })
       return { data: null, error: null }
+    },
+    update: async (id: number, updates: any) => {
+      if (isDemo) {
+        return { data: updates, error: null }
+      }
+      return updateCampaignAPI(id, updates)
     },
   }
 }

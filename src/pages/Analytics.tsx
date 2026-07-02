@@ -34,13 +34,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatCurrency, formatNumber, formatRelativeDate } from '@/lib/utils'
-import { useDashboardStats, useCampaigns } from '@/hooks/useApi'
+import { useDashboardStats, useCampaigns, useTimeline } from '@/hooks/useApi'
 import { generateTimelineData } from '@/lib/mockData'
 
 export function AnalyticsPage() {
   // API réelle
   const { data: stats, loading, error, refresh } = useDashboardStats()
   const { data: apiCampaigns, loading: loadingCampaigns, refresh: refreshCampaigns } = useCampaigns()
+  const { data: timelineApiData } = useTimeline()
 
   const campaigns = apiCampaigns || []
 
@@ -68,7 +69,7 @@ export function AnalyticsPage() {
     )
   }
 
-  const timelineData = generateTimelineData()
+  const timelineData = timelineApiData || generateTimelineData()
   const topCampaigns = [...campaigns]
     .filter((c) => c.stats)
     .sort((a, b) => (b.stats?.total_sent || 0) - (a.stats?.total_sent || 0))
@@ -128,6 +129,45 @@ export function AnalyticsPage() {
           color="orange"
         />
       </div>
+
+      {/* Engagement global */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary-600" />
+              Engagement global
+            </h3>
+            <p className="text-xs text-slate-500">Basé sur les SMS délivrés</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-[11px] font-medium text-slate-600 mb-1">Taux de délivrance</p>
+              <p className="text-xl font-bold text-slate-900">
+                {totalSent > 0 ? `${((totalDelivered / totalSent) * 100).toFixed(1)}%` : '—'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-[11px] font-medium text-slate-600 mb-1">Taux d'échec</p>
+              <p className="text-xl font-bold text-slate-900">
+                {totalSent > 0 ? `${((totalFailed / totalSent) * 100).toFixed(1)}%` : '—'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-[11px] font-medium text-slate-600 mb-1">Coût moyen / SMS</p>
+              <p className="text-xl font-bold text-slate-900">
+                {totalSent > 0 ? formatCurrency((stats?.totalCost || 0) / totalSent) : '—'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-[11px] font-medium text-slate-600 mb-1">Campagnes actives</p>
+              <p className="text-xl font-bold text-slate-900">
+                {campaigns.filter((c) => c.status === 'sent').length}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Graphiques */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
