@@ -14,6 +14,22 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
 
+// Map Twilio status to valid sms_logs status
+function mapStatus(twilioStatus: string): string {
+  const statusMap: Record<string, string> = {
+    'queued': 'queued',
+    'sending': 'sending',
+    'sent': 'sent',
+    'delivered': 'delivered',
+    'failed': 'failed',
+    'undelivered': 'undelivered',
+    'busy': 'failed',
+    'no-answer': 'failed',
+    'canceled': 'failed',
+  }
+  return statusMap[twilioStatus.toLowerCase()] || 'failed'
+}
+
 // Vérifier la signature HMAC-SHA1 de Twilio
 async function verifyTwilioSignature(
   signature: string,
@@ -21,14 +37,12 @@ async function verifyTwilioSignature(
   params: Record<string, string>,
   authToken: string
 ): Promise<boolean> {
-  // Construire la chaîne de validation : URL triée + params triés
   const sortedKeys = Object.keys(params).sort()
   let data = url
   for (const key of sortedKeys) {
     data += key + params[key]
   }
 
-  // HMAC-SHA1
   const encoder = new TextEncoder()
   const keyData = encoder.encode(authToken)
   const dataData = encoder.encode(data)
@@ -80,7 +94,6 @@ Deno.serve(async (req) => {
     // Vérifier la signature Twilio
     const twilioSignature = req.headers.get('x-twilio-signature')
     if (twilioSignature) {
-      // Trouver le propriétaire du numéro pour récupérer l'auth token
       const { data: smsLog } = await supabase
         .from('sms_logs')
         .select('contact_id')
@@ -95,13 +108,16 @@ Deno.serve(async (req) => {
           .single()
 
         if (contact?.user_id) {
+          // Read from sms_config OR twilio_config
           const { data: profile } = await supabase
             .from('users')
-            .select('twilio_config')
+            .select('sms_config, twilio_config')
             .eq('id', contact.user_id)
             .single()
 
-          const authToken = profile?.twilio_config?.twilio?.authToken
+          const smsConfig = profile?.sms_config || profile?.twilio_config
+          const authToken = smsConfig?.twilio?.authToken
+
           if (authToken) {
             const requestUrl = req.url
             const isValid = await verifyTwilioSignature(twilioSignature, requestUrl, payload, authToken)
@@ -118,14 +134,16 @@ Deno.serve(async (req) => {
       console.warn('No X-Twilio-Signature header, skipping verification')
     }
 
-    const status = payload.MessageStatus.toLowerCase()
+    // Map status to valid CHECK constraint value
+    const rawStatus = payload.MessageStatus.toLowerCase()
+    const status = mapStatus(rawStatus)
     const updates: Record<string, any> = { status }
 
     if (status === 'delivered') {
       updates.delivered_at = new Date().toISOString()
     } else if (status === 'failed' || status === 'undelivered') {
       updates.failed_at = new Date().toISOString()
-      if (payload.ErrorCode) updates.error_code = payload.ErrorCode
+      if (payload.ErrorCode) updates.error_code = String(payload.ErrorCode)
       if (payload.ErrorMessage) updates.error_message = payload.ErrorMessage
     }
 

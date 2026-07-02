@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 CREATE TABLE IF NOT EXISTS public.contacts (
   id BIGSERIAL PRIMARY KEY,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-  phone VARCHAR(20) UNIQUE NOT NULL,
+  phone VARCHAR(20) NOT NULL,
   first_name VARCHAR(100),
   last_name VARCHAR(100),
   email VARCHAR(255),
@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS public.contacts (
   tags TEXT[] DEFAULT ARRAY[]::TEXT[],
   custom_fields JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, phone)
 );
 
 -- Index pour performances
@@ -113,7 +114,7 @@ CREATE TABLE IF NOT EXISTS public.sms_logs (
   phone VARCHAR(20) NOT NULL,
   message TEXT NOT NULL,
   message_sid VARCHAR(100) UNIQUE, -- Twilio Message SID
-  status VARCHAR(50) DEFAULT 'queued' CHECK (status IN ('queued', 'sent', 'delivered', 'failed', 'undelivered', 'read', 'clicked')),
+  status VARCHAR(50) DEFAULT 'queued' CHECK (status IN ('queued', 'sending', 'sent', 'delivered', 'failed', 'undelivered', 'busy', 'no-answer', 'canceled', 'read', 'clicked')),
   error_code VARCHAR(10),
   error_message TEXT,
   cost DECIMAL(10,4) DEFAULT 0,
@@ -602,6 +603,10 @@ CREATE POLICY "Users view own coupon_usages" ON public.coupon_usages
 CREATE POLICY "Users manage own invitations" ON public.invitations
   FOR ALL USING (auth.uid() = user_id);
 
+-- Public read for invitation by unique_token (for /i/:token page)
+CREATE POLICY "Public can read active invitations" ON public.invitations
+  FOR SELECT USING (status = 'active');
+
 CREATE POLICY "Users view invitation_responses" ON public.invitation_responses
   FOR ALL USING (
     EXISTS (SELECT 1 FROM public.invitations WHERE id = invitation_responses.invitation_id AND user_id = auth.uid())
@@ -861,5 +866,23 @@ CREATE POLICY "Service role can insert sms_logs" ON public.sms_logs
 -- =====================================================
 -- FIN DU SCRIPT
 -- =====================================================
--- Total : 14 tables, 11 indexes, 9 triggers, 9 fonctions, 12 policies
+-- Total : 14 tables, 11 indexes, 9 triggers, 10 fonctions, 13 policies
 -- =====================================================
+
+-- =====================================================
+-- SCHEDULED CAMPAIGNS (à exécuter via pg_cron ou Edge Function)
+-- =====================================================
+-- Si pg_cron est installé, exécuter :
+-- SELECT cron.schedule('process-scheduled-campaigns', '*/5 * * * *', $$SELECT public.process_scheduled_campaigns()$$);
+-- =====================================================
+
+-- Fonction : traiter les campagnes planifiées
+CREATE OR REPLACE FUNCTION public.process_scheduled_campaigns()
+RETURNS void AS $$
+BEGIN
+  UPDATE public.campaigns
+  SET status = 'sending', updated_at = NOW()
+  WHERE status = 'scheduled'
+    AND scheduled_at <= NOW();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

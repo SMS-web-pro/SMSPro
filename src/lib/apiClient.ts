@@ -478,62 +478,30 @@ export async function fetchDashboardStatsAPI() {
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
 
-  // SMS stats: compter directement depuis sms_logs via les contacts de l'utilisateur
-  const { data: userContacts } = await client
-    .from('contacts')
-    .select('id')
-    .eq('user_id', user.id)
-
-  const contactIds = userContacts?.map((c: any) => c.id) || []
-
-  let totalSent = 0
-  let totalDelivered = 0
-  let totalCost = 0
-
-  if (contactIds.length > 0) {
-    const { data: smsLogs } = await client
-      .from('sms_logs')
-      .select('status, cost')
-      .in('contact_id', contactIds)
-
-    if (smsLogs) {
-      totalSent = smsLogs.length
-      totalDelivered = smsLogs.filter((l: any) => l.status === 'delivered').length
-      totalCost = smsLogs.reduce((sum: number, l: any) => sum + (parseFloat(l.cost) || 0), 0)
-    }
-  }
-
-  // Aussi compter via les campagnes (sms avec campaign_id)
+  // Use campaign_stats for aggregated data (avoids loading all sms_logs)
   const { data: campaignStats } = await client
     .from('campaign_stats')
     .select('total_sent, total_delivered, total_cost, total_read, total_clicked')
 
-  if (campaignStats && contactIds.length === 0) {
-    totalSent = campaignStats.reduce((s: number, c: any) => s + (c.total_sent || 0), 0)
-    totalDelivered = campaignStats.reduce((s: number, c: any) => s + (c.total_delivered || 0), 0)
-    totalCost = campaignStats.reduce((s: number, c: any) => s + (parseFloat(c.total_cost) || 0), 0)
-  }
-
+  const totalSent = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_sent || 0), 0)
+  const totalDelivered = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_delivered || 0), 0)
+  const totalCost = (campaignStats || []).reduce((s: number, c: any) => s + (parseFloat(c.total_cost) || 0), 0)
   const totalRead = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_read || 0), 0)
   const totalClicked = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_clicked || 0), 0)
 
-  // Compter les réponses sortantes (inbox_messages direction=outbound)
+  // Compter les réponses sortantes
   const { count: totalReplied } = await client
     .from('inbox_messages')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
     .eq('direction', 'outbound')
 
-  // Compter les désabonnements (sms_logs avec status undelivered ou body STOP)
-  let totalOptOut = 0
-  if (contactIds.length > 0) {
-    const { count: undeliveredCount } = await client
-      .from('sms_logs')
-      .select('*', { count: 'exact', head: true })
-      .in('contact_id', contactIds)
-      .eq('status', 'undelivered')
-    totalOptOut = undeliveredCount || 0
-  }
+  // Compter les désabonnements (contacts opted_out)
+  const { count: totalOptOut } = await client
+    .from('contacts')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('opted_in', false)
 
   const deliveryRate = totalSent > 0
     ? Math.round((totalDelivered / totalSent) * 10000) / 100
@@ -551,7 +519,7 @@ export async function fetchDashboardStatsAPI() {
       totalRead,
       totalClicked,
       totalReplied: totalReplied || 0,
-      totalOptOut,
+      totalOptOut: totalOptOut || 0,
     },
     error: null,
   }
@@ -567,25 +535,24 @@ export async function fetchTimelineAPI() {
   const { data: { user } } = await client.auth.getUser()
   if (!user) return { data: null, error: 'Non authentifié' }
 
-  // Récupérer les contacts de l'utilisateur
-  const { data: userContacts } = await client
-    .from('contacts')
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+  // Use campaign_stats join instead of loading all sms_logs
+  const { data: campaigns } = await client
+    .from('campaigns')
     .select('id')
     .eq('user_id', user.id)
 
-  const contactIds = userContacts?.map((c: any) => c.id) || []
+  const campaignIds = campaigns?.map((c: any) => c.id) || []
 
-  if (contactIds.length === 0) {
+  if (campaignIds.length === 0) {
     return { data: [], error: null }
   }
-
-  // Récupérer les sms_logs des 30 derniers jours
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
   const { data: smsLogs } = await client
     .from('sms_logs')
     .select('status, sent_at')
-    .in('contact_id', contactIds)
+    .in('campaign_id', campaignIds)
     .gte('sent_at', thirtyDaysAgo)
 
   if (!smsLogs) {

@@ -19,6 +19,22 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
 
+// Match keyword based on match_type
+function matchKeyword(messageLower: string, keyword: string, matchType: string, caseSensitive: boolean): boolean {
+  const msg = caseSensitive ? messageLower : messageLower
+  const kw = caseSensitive ? keyword : keyword.toLowerCase()
+
+  switch (matchType) {
+    case 'exact':
+      return msg.trim() === kw
+    case 'starts_with':
+      return msg.startsWith(kw)
+    case 'contains':
+    default:
+      return msg.includes(kw)
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS })
@@ -59,7 +75,6 @@ Deno.serve(async (req) => {
     const normalizedPhone = from.replace(/[^0-9+]/g, '')
 
     // Trouver l'utilisateur propriétaire du numéro de destination
-    // Chercher dans les configurations SMS de tous les utilisateurs
     const { data: users } = await supabase
       .from('users')
       .select('id, sms_config, twilio_config')
@@ -93,7 +108,6 @@ Deno.serve(async (req) => {
       if (existingContact) {
         contactId = existingContact.id
       } else {
-        // Créer le contact automatiquement
         const { data: newContact } = await supabase
           .from('contacts')
           .insert({
@@ -113,7 +127,37 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Insérer dans inbox_messages
+    // Match auto-reply rules BEFORE inserting inbox (to get rule_triggered_id)
+    let matchedRule: any = null
+    let matchedKeyword: string | null = null
+
+    if (ownerUserId) {
+      const { data: rules } = await supabase
+        .from('auto_reply_rules')
+        .select('*')
+        .eq('user_id', ownerUserId)
+        .eq('is_active', true)
+
+      if (rules && rules.length > 0) {
+        const messageLower = body.toLowerCase().trim()
+        for (const rule of rules) {
+          const keywords = (rule.keyword || '').split(',').map((k: string) => k.trim())
+          const caseSensitive = rule.case_sensitive || false
+          const matchType = rule.match_type || 'contains'
+
+          for (const kw of keywords) {
+            if (kw && matchKeyword(messageLower, kw, matchType, caseSensitive)) {
+              matchedRule = rule
+              matchedKeyword = kw
+              break
+            }
+          }
+          if (matchedRule) break
+        }
+      }
+    }
+
+    // Insérer dans inbox_messages (avec rule_triggered_id et keyword_detected)
     const inboxEntry: any = {
       phone: normalizedPhone,
       message: body,
@@ -129,6 +173,10 @@ Deno.serve(async (req) => {
     if (contactId) {
       inboxEntry.contact_id = contactId
     }
+    if (matchedRule) {
+      inboxEntry.rule_triggered_id = matchedRule.id
+      inboxEntry.keyword_detected = matchedKeyword
+    }
 
     const { data: insertedMessage, error: inboxError } = await supabase
       .from('inbox_messages')
@@ -140,111 +188,152 @@ Deno.serve(async (req) => {
       console.error('Inbox insert error:', inboxError)
     }
 
-    // Vérifier les auto-reply rules
-    if (ownerUserId) {
-      const { data: rules } = await supabase
-        .from('auto_reply_rules')
-        .select('*')
-        .eq('user_id', ownerUserId)
-        .eq('is_active', true)
+    // Execute matched rule
+    if (matchedRule && ownerUserId) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('sms_config, twilio_config')
+        .eq('id', ownerUserId)
+        .single()
 
-      if (rules && rules.length > 0) {
-        const messageLower = body.toLowerCase().trim()
-        for (const rule of rules) {
-          const keywords = (rule.keyword || '').toLowerCase().split(',').map((k: string) => k.trim())
-          if (keywords.some((kw: string) => messageLower.includes(kw))) {
-            // Envoyer la réponse automatique
-            const { data: profile } = await supabase
-              .from('users')
-              .select('sms_config, twilio_config')
-              .eq('id', ownerUserId)
+      const smsConfig = profile?.sms_config || profile?.twilio_config
+      const activeProvider = smsConfig?.activeProvider || 'twilio'
+
+      if (activeProvider === 'twilio') {
+        const accountSid = smsConfig?.twilio?.accountSid
+        const authToken = smsConfig?.twilio?.authToken
+        const senderNumber = smsConfig?.twilio?.senderNumber
+
+        if (accountSid && authToken && senderNumber) {
+          const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
+          const auth = btoa(`${accountSid}:${authToken}`)
+          const formData = new URLSearchParams()
+          formData.append('To', normalizedPhone)
+          formData.append('From', senderNumber)
+          formData.append('Body', matchedRule.response_message)
+
+          await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Basic ${auth}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData.toString(),
+          })
+
+          // Marquer comme auto-reply
+          if (insertedMessage?.id) {
+            await supabase
+              .from('inbox_messages')
+              .update({ auto_reply_sent: true })
+              .eq('id', insertedMessage.id)
+          }
+        }
+      } else if (activeProvider === 'telnyx') {
+        // Telnyx auto-reply
+        const apiKey = smsConfig?.telnyx?.apiKey
+        const senderNumber = smsConfig?.telnyx?.senderNumber
+
+        if (apiKey && senderNumber) {
+          await fetch('https://api.telnyx.com/v2/messages', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: senderNumber,
+              to: normalizedPhone,
+              text: matchedRule.response_message,
+            }),
+          })
+
+          if (insertedMessage?.id) {
+            await supabase
+              .from('inbox_messages')
+              .update({ auto_reply_sent: true })
+              .eq('id', insertedMessage.id)
+          }
+        }
+      }
+
+      // Execute rule actions
+      if (matchedRule.actions && Array.isArray(matchedRule.actions) && contactId) {
+        for (const action of matchedRule.actions) {
+          if (action.type === 'opt_out') {
+            await supabase
+              .from('contacts')
+              .update({ opted_in: false, opted_out_date: new Date().toISOString() })
+              .eq('id', contactId)
+          } else if (action.type === 'opt_in') {
+            await supabase
+              .from('contacts')
+              .update({ opted_in: true, opted_in_date: new Date().toISOString() })
+              .eq('id', contactId)
+          } else if (action.type === 'add_tag' && action.tag) {
+            const { data: contact } = await supabase
+              .from('contacts')
+              .select('tags')
+              .eq('id', contactId)
               .single()
+            const existingTags = contact?.tags || []
+            if (!existingTags.includes(action.tag)) {
+              await supabase
+                .from('contacts')
+                .update({ tags: [...existingTags, action.tag] })
+                .eq('id', contactId)
+            }
+          } else if (action.type === 'send_coupon' && action.coupon_id) {
+            // Call use_coupon RPC to properly track usage
+            const { data: couponResult } = await supabase
+              .rpc('use_coupon', {
+                p_code: '', // Will be looked up by coupon_id
+                p_contact_id: contactId,
+                p_source: 'auto_reply',
+              })
 
-            const smsConfig = profile?.sms_config || profile?.twilio_config
-            const activeProvider = smsConfig?.activeProvider || 'twilio'
-
-            if (activeProvider === 'twilio') {
-              const accountSid = smsConfig?.twilio?.accountSid
-              const authToken = smsConfig?.twilio?.authToken
-              const senderNumber = smsConfig?.twilio?.senderNumber
-
-              if (accountSid && authToken && senderNumber) {
-                const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
-                const auth = btoa(`${accountSid}:${authToken}`)
-                const formData = new URLSearchParams()
-                formData.append('To', normalizedPhone)
-                formData.append('From', senderNumber)
-                formData.append('Body', rule.response_message)
-
-                await fetch(url, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Basic ${auth}`,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                  },
-                  body: formData.toString(),
-                })
-
-                // Marquer comme auto-reply dans inbox (only the specific message)
-                if (insertedMessage?.id) {
-                  await supabase
-                    .from('inbox_messages')
-                    .update({ auto_reply_sent: true })
-                    .eq('id', insertedMessage.id)
-                }
-
-                // Execute rule actions
-                if (rule.actions && Array.isArray(rule.actions) && contactId) {
-                  for (const action of rule.actions) {
-                    if (action.type === 'opt_out') {
-                      await supabase
-                        .from('contacts')
-                        .update({ opted_in: false })
-                        .eq('id', contactId)
-                    } else if (action.type === 'opt_in') {
-                      await supabase
-                        .from('contacts')
-                        .update({ opted_in: true })
-                        .eq('id', contactId)
-                    } else if (action.type === 'add_tag' && action.tag) {
-                      const { data: contact } = await supabase
-                        .from('contacts')
-                        .select('tags')
-                        .eq('id', contactId)
-                        .single()
-                      const existingTags = contact?.tags || []
-                      if (!existingTags.includes(action.tag)) {
-                        await supabase
-                          .from('contacts')
-                          .update({ tags: [...existingTags, action.tag] })
-                          .eq('id', contactId)
-                      }
-                    } else if (action.type === 'send_coupon' && action.coupon_id) {
-                      const { data: coupon } = await supabase
-                        .from('coupons')
-                        .select('code')
-                        .eq('id', action.coupon_id)
-                        .single()
-                      if (coupon?.code) {
-                        const couponUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
-                        const couponFormData = new URLSearchParams()
-                        couponFormData.append('To', normalizedPhone)
-                        couponFormData.append('From', senderNumber)
-                        couponFormData.append('Body', `Voici votre coupon : ${coupon.code}`)
-                        await fetch(couponUrl, {
-                          method: 'POST',
-                          headers: {
-                            'Authorization': `Basic ${auth}`,
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                          },
-                          body: couponFormData.toString(),
-                        })
-                      }
-                    }
+            // Fallback: if RPC doesn't support coupon_id lookup, send code directly
+            if (!couponResult?.success) {
+              const { data: coupon } = await supabase
+                .from('coupons')
+                .select('code')
+                .eq('id', action.coupon_id)
+                .single()
+              if (coupon?.code) {
+                const { data: profile2 } = await supabase
+                  .from('users')
+                  .select('sms_config, twilio_config')
+                  .eq('id', ownerUserId)
+                  .single()
+                const cfg = profile2?.sms_config || profile2?.twilio_config
+                const provider = cfg?.activeProvider || 'twilio'
+                if (provider === 'twilio') {
+                  const sid = cfg?.twilio?.accountSid
+                  const token = cfg?.twilio?.authToken
+                  const from2 = cfg?.twilio?.senderNumber
+                  if (sid && token && from2) {
+                    const auth2 = btoa(`${sid}:${token}`)
+                    const fd = new URLSearchParams()
+                    fd.append('To', normalizedPhone)
+                    fd.append('From', from2)
+                    fd.append('Body', `Voici votre coupon : ${coupon.code}`)
+                    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Basic ${auth2}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+                      body: fd.toString(),
+                    })
+                  }
+                } else if (provider === 'telnyx') {
+                  const key = cfg?.telnyx?.apiKey
+                  const from2 = cfg?.telnyx?.senderNumber
+                  if (key && from2) {
+                    await fetch('https://api.telnyx.com/v2/messages', {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ from: from2, to: normalizedPhone, text: `Voici votre coupon : ${coupon.code}` }),
+                    })
                   }
                 }
-
-                break
               }
             }
           }
