@@ -170,7 +170,22 @@ Deno.serve(async (req) => {
             error: 'Twilio non configuré. Renseignez SID, Token et Numéro.',
           })
         }
-        result = await sendTwilioSMS(testNumber, senderNumber, 'Test SMS depuis SMSPro ✓', accountSid, authToken)
+        const projectUrl = Deno.env.get('SUPABASE_URL') || ''
+        const projectRef = projectUrl.split('//')[1]?.split('.')[0] || ''
+        const webhookUrl = `https://${projectRef}.supabase.co/functions/v1/twilio-status`
+        result = await sendTwilioSMS(testNumber, senderNumber, 'Test SMS depuis SMSPro ✓', accountSid, authToken, webhookUrl)
+      }
+
+      // Logger le test SMS pour que le status callback puisse le retrouver
+      if (result.success && result.messageSid) {
+        await supabase.from('sms_logs').insert({
+          phone: testNumber,
+          message: 'Test SMS depuis SMSPro ✓',
+          message_sid: result.messageSid,
+          status: 'sent',
+          cost: result.price ? Math.abs(parseFloat(result.price)) : 0.08,
+          sent_at: new Date().toISOString(),
+        })
       }
 
       return jsonResponse({

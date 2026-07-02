@@ -448,27 +448,119 @@ export async function fetchDashboardStatsAPI() {
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
 
-  // SMS envoyés (via vue)
-  const { data: stats } = await client
-    .from('v_user_engagement')
-    .select('*')
+  // SMS stats: compter directement depuis sms_logs via les contacts de l'utilisateur
+  const { data: userContacts } = await client
+    .from('contacts')
+    .select('id')
     .eq('user_id', user.id)
-    .single()
+
+  const contactIds = userContacts?.map((c: any) => c.id) || []
+
+  let totalSent = 0
+  let totalDelivered = 0
+  let totalCost = 0
+
+  if (contactIds.length > 0) {
+    const { data: smsLogs } = await client
+      .from('sms_logs')
+      .select('status, cost')
+      .in('contact_id', contactIds)
+
+    if (smsLogs) {
+      totalSent = smsLogs.length
+      totalDelivered = smsLogs.filter((l: any) => l.status === 'delivered').length
+      totalCost = smsLogs.reduce((sum: number, l: any) => sum + (parseFloat(l.cost) || 0), 0)
+    }
+  }
+
+  // Aussi compter via les campagnes (sms avec campaign_id)
+  const { data: campaignStats } = await client
+    .from('campaign_stats')
+    .select('total_sent, total_delivered, total_cost')
+
+  if (campaignStats && contactIds.length === 0) {
+    totalSent = campaignStats.reduce((s: number, c: any) => s + (c.total_sent || 0), 0)
+    totalDelivered = campaignStats.reduce((s: number, c: any) => s + (c.total_delivered || 0), 0)
+    totalCost = campaignStats.reduce((s: number, c: any) => s + (parseFloat(c.total_cost) || 0), 0)
+  }
+
+  const deliveryRate = totalSent > 0
+    ? Math.round((totalDelivered / totalSent) * 10000) / 100
+    : 0
 
   return {
     data: {
       totalContacts: totalContacts || 0,
       activeContacts: activeContacts || 0,
       totalCampaigns: totalCampaigns || 0,
-      totalSent: stats?.total_sms_sent || 0,
-      totalDelivered: stats?.total_delivered || 0,
-      totalCost: stats?.total_cost || 0,
-      deliveryRate: stats?.total_sms_sent > 0
-        ? Math.round((stats.total_delivered / stats.total_sms_sent) * 10000) / 100
-        : 0,
+      totalSent,
+      totalDelivered,
+      totalCost,
+      deliveryRate,
     },
     error: null,
   }
+}
+
+/**
+ * Timeline des envois SMS (30 derniers jours)
+ */
+export async function fetchTimelineAPI() {
+  const client = getSupabase()
+  if (!client) return { data: null, error: 'Supabase non configuré' }
+
+  const { data: { user } } = await client.auth.getUser()
+  if (!user) return { data: null, error: 'Non authentifié' }
+
+  // Récupérer les contacts de l'utilisateur
+  const { data: userContacts } = await client
+    .from('contacts')
+    .select('id')
+    .eq('user_id', user.id)
+
+  const contactIds = userContacts?.map((c: any) => c.id) || []
+
+  if (contactIds.length === 0) {
+    return { data: [], error: null }
+  }
+
+  // Récupérer les sms_logs des 30 derniers jours
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: smsLogs } = await client
+    .from('sms_logs')
+    .select('status, sent_at')
+    .in('contact_id', contactIds)
+    .gte('sent_at', thirtyDaysAgo)
+
+  if (!smsLogs) {
+    return { data: [], error: null }
+  }
+
+  // Grouper par jour
+  const timeline: Record<string, { sent: number; delivered: number }> = {}
+
+  for (const log of smsLogs) {
+    const date = log.sent_at ? log.sent_at.slice(0, 10) : null
+    if (!date) continue
+    if (!timeline[date]) timeline[date] = { sent: 0, delivered: 0 }
+    timeline[date].sent++
+    if (log.status === 'delivered') timeline[date].delivered++
+  }
+
+  // Remplir les jours manquants
+  const result: Array<{ date: string; sent: number; delivered: number }> = []
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+    const dateStr = d.toISOString().slice(0, 10)
+    result.push({
+      date: dateStr,
+      sent: timeline[dateStr]?.sent || 0,
+      delivered: timeline[dateStr]?.delivered || 0,
+    })
+  }
+
+  return { data: result, error: null }
 }
 
 /**

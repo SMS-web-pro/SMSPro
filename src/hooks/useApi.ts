@@ -21,6 +21,7 @@ import {
   fetchInvitationsAPI,
   fetchInboxAPI,
   fetchDashboardStatsAPI,
+  fetchTimelineAPI,
   createContactAPI,
   createCampaignAPI,
   createAutoReplyAPI,
@@ -176,6 +177,28 @@ export function useDashboardStats() {
     }
     return fetchDashboardStatsAPI()
   }, [isDemo, demoContacts, demoCampaigns])
+
+  return useFetch(fetcher, [isDemo])
+}
+
+export function useTimeline() {
+  const isDemo = useStore((s) => s.isDemo)
+
+  const fetcher = useCallback(async () => {
+    if (isDemo) {
+      // Retourner des données mock en mode démo
+      const data = Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000)
+        return {
+          date: d.toISOString().slice(0, 10),
+          sent: Math.floor(Math.random() * 20),
+          delivered: Math.floor(Math.random() * 18),
+        }
+      })
+      return { data, error: null }
+    }
+    return fetchTimelineAPI()
+  }, [isDemo])
 
   return useFetch(fetcher, [isDemo])
 }

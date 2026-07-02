@@ -37,13 +37,13 @@ import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatCurrency, formatNumber, formatRelativeDate } from '@/lib/utils'
-import { generateTimelineData } from '@/lib/mockData'
-import { useDashboardStats, useCampaigns } from '@/hooks/useApi'
+import { useDashboardStats, useCampaigns, useTimeline } from '@/hooks/useApi'
 
 export function DashboardPage() {
   // Chargement depuis l'API
   const { data: statsData, loading: loadingStats, error: errorStats, refresh: refreshStats } = useDashboardStats()
   const { data: apiCampaigns, loading: loadingCampaigns, refresh: refreshCampaigns } = useCampaigns()
+  const { data: timelineData } = useTimeline()
 
   const campaigns = apiCampaigns || []
   const stats = statsData || {
@@ -301,7 +301,7 @@ export function DashboardPage() {
                 </div>
               </div>
             </div>
-            <ChartArea data={generateTimelineData()} />
+            <ChartArea data={timelineData || []} />
           </CardContent>
         </Card>
 
