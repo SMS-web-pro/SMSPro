@@ -568,14 +568,18 @@ CREATE POLICY "Users manage own segments" ON public.segments
 CREATE POLICY "Users manage own campaigns" ON public.campaigns
   FOR ALL USING (auth.uid() = user_id);
 
--- SMS logs : accès via campaign_id
+-- SMS logs : accès via campaign_id OU contact_id
 CREATE POLICY "Users view own sms_logs" ON public.sms_logs
   FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.contacts WHERE id = sms_logs.contact_id AND user_id = auth.uid())
+    OR
     EXISTS (SELECT 1 FROM public.campaigns WHERE id = sms_logs.campaign_id AND user_id = auth.uid())
   );
 
 CREATE POLICY "Users insert own sms_logs" ON public.sms_logs
   FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM public.contacts WHERE id = sms_logs.contact_id AND user_id = auth.uid())
+    OR
     EXISTS (SELECT 1 FROM public.campaigns WHERE id = sms_logs.campaign_id AND user_id = auth.uid())
   );
 

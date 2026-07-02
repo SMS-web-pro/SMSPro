@@ -460,47 +460,48 @@ export async function fetchDashboardStatsAPI() {
   const { data: { user } } = await client.auth.getUser()
   if (!user) return { data: null, error: 'Non authentifié' }
 
-  // Compter les contacts
+  // Compter les contacts (même requête que la page Contacts via RLS)
   const { count: totalContacts } = await client
     .from('contacts')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
 
   const { count: activeContacts } = await client
     .from('contacts')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
     .eq('opted_in', true)
 
-  // Campagnes
+  // Campagnes (même requête que la page Campagnes via RLS)
   const { count: totalCampaigns } = await client
     .from('campaigns')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
 
-  // Use campaign_stats for aggregated data (avoids loading all sms_logs)
+  // SMS stats depuis sms_logs (via RLS, pas besoin de user_id)
+  const { data: smsLogs } = await client
+    .from('sms_logs')
+    .select('status, cost')
+
+  const totalSent = smsLogs?.length || 0
+  const totalDelivered = smsLogs?.filter((l: any) => l.status === 'delivered').length || 0
+  const totalCost = smsLogs?.reduce((sum: number, l: any) => sum + (parseFloat(l.cost) || 0), 0) || 0
+
+  // Read/clicked depuis campaign_stats
   const { data: campaignStats } = await client
     .from('campaign_stats')
-    .select('total_sent, total_delivered, total_cost, total_read, total_clicked')
+    .select('total_read, total_clicked')
 
-  const totalSent = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_sent || 0), 0)
-  const totalDelivered = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_delivered || 0), 0)
-  const totalCost = (campaignStats || []).reduce((s: number, c: any) => s + (parseFloat(c.total_cost) || 0), 0)
   const totalRead = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_read || 0), 0)
   const totalClicked = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_clicked || 0), 0)
 
-  // Compter les réponses sortantes
+  // Réponses sortantes
   const { count: totalReplied } = await client
     .from('inbox_messages')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
     .eq('direction', 'outbound')
 
-  // Compter les désabonnements (contacts opted_out)
+  // Désabonnements
   const { count: totalOptOut } = await client
     .from('contacts')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
     .eq('opted_in', false)
 
   const deliveryRate = totalSent > 0
@@ -532,27 +533,12 @@ export async function fetchTimelineAPI() {
   const client = getSupabase()
   if (!client) return { data: null, error: 'Supabase non configuré' }
 
-  const { data: { user } } = await client.auth.getUser()
-  if (!user) return { data: null, error: 'Non authentifié' }
-
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-  // Use campaign_stats join instead of loading all sms_logs
-  const { data: campaigns } = await client
-    .from('campaigns')
-    .select('id')
-    .eq('user_id', user.id)
-
-  const campaignIds = campaigns?.map((c: any) => c.id) || []
-
-  if (campaignIds.length === 0) {
-    return { data: [], error: null }
-  }
-
+  // Use sms_logs directly via RLS (same as contacts page)
   const { data: smsLogs } = await client
     .from('sms_logs')
     .select('status, sent_at')
-    .in('campaign_id', campaignIds)
     .gte('sent_at', thirtyDaysAgo)
 
   if (!smsLogs) {
