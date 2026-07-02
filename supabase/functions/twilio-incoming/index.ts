@@ -20,8 +20,8 @@ const supabase = createClient(
 )
 
 // Match keyword based on match_type
-function matchKeyword(messageLower: string, keyword: string, matchType: string, caseSensitive: boolean): boolean {
-  const msg = caseSensitive ? messageLower : messageLower
+function matchKeyword(message: string, keyword: string, matchType: string, caseSensitive: boolean): boolean {
+  const msg = caseSensitive ? message : message.toLowerCase()
   const kw = caseSensitive ? keyword : keyword.toLowerCase()
 
   switch (matchType) {
@@ -58,6 +58,7 @@ Deno.serve(async (req) => {
     }
 
     console.log('Incoming SMS:', JSON.stringify(payload))
+    console.log('From:', from, 'To:', to, 'Body:', body, 'SID:', messageSid)
 
     const from = payload.From || ''
     const to = payload.To || ''
@@ -93,6 +94,8 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+    console.log('Found owner:', ownerUserId || 'NONE')
 
     // Trouver ou créer le contact
     let contactId: number | null = null
@@ -139,14 +142,14 @@ Deno.serve(async (req) => {
         .eq('is_active', true)
 
       if (rules && rules.length > 0) {
-        const messageLower = body.toLowerCase().trim()
+        const trimmedBody = body.trim()
         for (const rule of rules) {
           const keywords = (rule.keyword || '').split(',').map((k: string) => k.trim())
           const caseSensitive = rule.case_sensitive || false
           const matchType = rule.match_type || 'contains'
 
           for (const kw of keywords) {
-            if (kw && matchKeyword(messageLower, kw, matchType, caseSensitive)) {
+            if (kw && matchKeyword(trimmedBody, kw, matchType, caseSensitive)) {
               matchedRule = rule
               matchedKeyword = kw
               break
@@ -156,6 +159,8 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+    console.log('Matched rule:', matchedRule?.id || 'NONE', 'keyword:', matchedKeyword || 'NONE')
 
     // Insérer dans inbox_messages (avec rule_triggered_id et keyword_detected)
     const inboxEntry: any = {
@@ -186,6 +191,25 @@ Deno.serve(async (req) => {
 
     if (inboxError) {
       console.error('Inbox insert error:', inboxError)
+      // Fallback: insert without rule_triggered_id/keyword_detected if columns missing
+      const { data: fallbackMessage } = await supabase
+        .from('inbox_messages')
+        .insert({
+          phone: normalizedPhone,
+          message: body,
+          direction: 'inbound',
+          is_read: false,
+          auto_reply_sent: false,
+          received_at: new Date().toISOString(),
+          user_id: ownerUserId || undefined,
+          contact_id: contactId || undefined,
+        })
+        .select('id')
+        .single()
+      if (fallbackMessage) {
+        // Use fallback message id for auto-reply marking
+        Object.assign(insertedMessage || {}, fallbackMessage)
+      }
     }
 
     // Execute matched rule
