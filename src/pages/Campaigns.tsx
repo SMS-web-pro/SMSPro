@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus,
   Search,
@@ -37,6 +37,7 @@ export function CampaignsPage() {
   const { data: apiCampaigns, loading, error, refresh } = useCampaigns()
   const mutations = useCampaignMutations()
   const addToast = useStore((s) => s.addToast)
+  const navigate = useNavigate()
 
   const campaigns = apiCampaigns || []
 
@@ -199,7 +200,7 @@ export function CampaignsPage() {
             }
             action={
               !search && statusFilter === 'all'
-                ? { label: 'Nouvelle campagne', onClick: () => (window.location.href = '/campaigns/new') }
+                ? { label: 'Nouvelle campagne', onClick: () => navigate('/campaigns/new') }
                 : undefined
             }
           />

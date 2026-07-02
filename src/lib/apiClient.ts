@@ -506,12 +506,33 @@ export async function fetchDashboardStatsAPI() {
   // Aussi compter via les campagnes (sms avec campaign_id)
   const { data: campaignStats } = await client
     .from('campaign_stats')
-    .select('total_sent, total_delivered, total_cost')
+    .select('total_sent, total_delivered, total_cost, total_read, total_clicked')
 
   if (campaignStats && contactIds.length === 0) {
     totalSent = campaignStats.reduce((s: number, c: any) => s + (c.total_sent || 0), 0)
     totalDelivered = campaignStats.reduce((s: number, c: any) => s + (c.total_delivered || 0), 0)
     totalCost = campaignStats.reduce((s: number, c: any) => s + (parseFloat(c.total_cost) || 0), 0)
+  }
+
+  const totalRead = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_read || 0), 0)
+  const totalClicked = (campaignStats || []).reduce((s: number, c: any) => s + (c.total_clicked || 0), 0)
+
+  // Compter les réponses sortantes (inbox_messages direction=outbound)
+  const { count: totalReplied } = await client
+    .from('inbox_messages')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('direction', 'outbound')
+
+  // Compter les désabonnements (sms_logs avec status undelivered ou body STOP)
+  let totalOptOut = 0
+  if (contactIds.length > 0) {
+    const { count: undeliveredCount } = await client
+      .from('sms_logs')
+      .select('*', { count: 'exact', head: true })
+      .in('contact_id', contactIds)
+      .eq('status', 'undelivered')
+    totalOptOut = undeliveredCount || 0
   }
 
   const deliveryRate = totalSent > 0
@@ -527,6 +548,10 @@ export async function fetchDashboardStatsAPI() {
       totalDelivered,
       totalCost,
       deliveryRate,
+      totalRead,
+      totalClicked,
+      totalReplied: totalReplied || 0,
+      totalOptOut,
     },
     error: null,
   }

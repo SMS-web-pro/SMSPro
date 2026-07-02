@@ -105,8 +105,12 @@ export function generateDemoData() {
         total_delivered: 21,
         total_failed: 1,
         total_pending: 0,
+        total_read: 14,
+        total_clicked: 6,
         total_cost: 22 * 0.08,
         delivery_rate: 95.45,
+        read_rate: 66.67,
+        click_rate: 42.86,
       },
       created_at: daysAgo(7),
     },
@@ -125,8 +129,12 @@ export function generateDemoData() {
         total_delivered: 17,
         total_failed: 1,
         total_pending: 0,
+        total_read: 12,
+        total_clicked: 5,
         total_cost: 18 * 0.08,
         delivery_rate: 94.44,
+        read_rate: 70.59,
+        click_rate: 41.67,
       },
       created_at: daysAgo(3),
     },
@@ -153,8 +161,12 @@ export function generateDemoData() {
         total_delivered: 14,
         total_failed: 0,
         total_pending: 8,
+        total_read: 0,
+        total_clicked: 0,
         total_cost: 22 * 0.08,
         delivery_rate: 63.64,
+        read_rate: 0,
+        click_rate: 0,
       },
       created_at: daysAgo(0),
     },
@@ -301,6 +313,7 @@ export function generateDemoData() {
       is_active: true,
       terms: 'Non cumulable.',
       created_at: daysAgo(10),
+      updated_at: daysAgo(10),
     },
     {
       id: id(),
@@ -317,6 +330,7 @@ export function generateDemoData() {
       is_active: true,
       terms: 'Une seule utilisation par client.',
       created_at: daysAgo(60),
+      updated_at: daysAgo(60),
     },
     {
       id: id(),
@@ -332,6 +346,7 @@ export function generateDemoData() {
       per_contact_limit: 2,
       is_active: true,
       created_at: daysAgo(5),
+      updated_at: daysAgo(5),
     },
     {
       id: id(),
@@ -347,15 +362,16 @@ export function generateDemoData() {
       per_contact_limit: 1,
       is_active: true,
       created_at: daysAgo(30),
+      updated_at: daysAgo(30),
     },
   ]
 
   // === Utilisations de coupons (4) ===
   const couponUsages: CouponUsage[] = [
-    { id: id(), coupon_id: 1, coupon_code: 'BLACK25', contact_id: 1, phone: contacts[0].phone, used_at: daysAgo(3), order_value: 78.50, source: 'sms_campaign', campaign_id: 1 },
-    { id: id(), coupon_id: 1, coupon_code: 'BLACK25', contact_id: 2, phone: contacts[1].phone, used_at: daysAgo(2), order_value: 125.00, source: 'sms_campaign', campaign_id: 1 },
-    { id: id(), coupon_id: 1, coupon_code: 'BLACK25', contact_id: 3, phone: contacts[2].phone, used_at: daysAgo(1), order_value: 45.00, source: 'sms_campaign', campaign_id: 1 },
-    { id: id(), coupon_id: 2, coupon_code: 'WELCOME10', contact_id: 5, phone: contacts[4].phone, used_at: daysAgo(5), order_value: 65.00, source: 'sms_campaign' },
+    { id: id(), coupon_id: 1, coupon_code: 'BLACK25', contact_id: 1, phone: contacts[0].phone, used_at: daysAgo(3), order_value: 78.50, source: 'sms_campaign', campaign_id: 1, created_at: daysAgo(3) },
+    { id: id(), coupon_id: 1, coupon_code: 'BLACK25', contact_id: 2, phone: contacts[1].phone, used_at: daysAgo(2), order_value: 125.00, source: 'sms_campaign', campaign_id: 1, created_at: daysAgo(2) },
+    { id: id(), coupon_id: 1, coupon_code: 'BLACK25', contact_id: 3, phone: contacts[2].phone, used_at: daysAgo(1), order_value: 45.00, source: 'sms_campaign', campaign_id: 1, created_at: daysAgo(1) },
+    { id: id(), coupon_id: 2, coupon_code: 'WELCOME10', contact_id: 5, phone: contacts[4].phone, used_at: daysAgo(5), order_value: 65.00, source: 'sms_campaign', created_at: daysAgo(5) },
   ]
 
   // === Invitations (2) ===
@@ -372,6 +388,7 @@ export function generateDemoData() {
       unique_token: `inv_demo_${id()}`,
       max_guests: 2,
       response_deadline: new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString(),
+      is_rsvp: true,
       status: 'active',
       responses: [
         { id: id(), invitation_id: 1, contact_id: 1, phone: contacts[0].phone, response: 'accepted', guests_count: 2, responded_at: daysAgo(2) },
@@ -391,6 +408,7 @@ export function generateDemoData() {
       unique_token: `inv_demo_${id()}`,
       max_guests: 1,
       response_deadline: new Date(Date.now() + 12 * 24 * 3600 * 1000).toISOString(),
+      is_rsvp: false,
       status: 'active',
       responses: [
         { id: id(), invitation_id: 2, contact_id: 4, phone: contacts[3].phone, response: 'accepted', guests_count: 1, responded_at: daysAgo(1) },
@@ -402,14 +420,14 @@ export function generateDemoData() {
 
   // === Inbox (8 messages) ===
   const inboxMessages: InboxMessage[] = [
-    { id: id(), contact_id: 1, phone: contacts[0].phone, direction: 'inbound', message: 'OUI', keyword_detected: 'OUI', auto_reply_sent: true, rule_triggered_id: 3, received_at: daysAgo(0), is_read: false },
-    { id: id(), contact_id: 2, phone: contacts[1].phone, direction: 'inbound', message: 'INFO', keyword_detected: 'INFO', auto_reply_sent: true, rule_triggered_id: 4, received_at: daysAgo(0), is_read: false },
-    { id: id(), contact_id: 3, phone: contacts[2].phone, direction: 'inbound', message: 'STOP', keyword_detected: 'STOP', auto_reply_sent: true, rule_triggered_id: 1, received_at: daysAgo(0), is_read: true },
-    { id: id(), contact_id: 5, phone: contacts[4].phone, direction: 'inbound', message: 'RDV', keyword_detected: 'RDV', auto_reply_sent: true, rule_triggered_id: 5, received_at: daysAgo(1), is_read: true },
-    { id: id(), contact_id: 7, phone: contacts[6].phone, direction: 'inbound', message: 'Bonjour, je voudrais avoir plus d\'infos svp', auto_reply_sent: false, received_at: daysAgo(1), is_read: true },
-    { id: id(), contact_id: 1, phone: contacts[0].phone, direction: 'outbound', message: '🔥 Black Friday ! -25% sur tout', auto_reply_sent: false, received_at: daysAgo(5), is_read: true },
-    { id: id(), contact_id: 4, phone: contacts[3].phone, direction: 'inbound', message: 'YES', keyword_detected: 'OUI', auto_reply_sent: true, rule_triggered_id: 3, received_at: daysAgo(2), is_read: true },
-    { id: id(), contact_id: 8, phone: contacts[7].phone, direction: 'inbound', message: 'Merci pour la promo !', auto_reply_sent: false, received_at: daysAgo(3), is_read: true },
+    { id: id(), user_id: 'demo-user', contact_id: 1, phone: contacts[0].phone, direction: 'inbound', message: 'OUI', keyword_detected: 'OUI', auto_reply_sent: true, rule_triggered_id: 3, received_at: daysAgo(0), is_read: false },
+    { id: id(), user_id: 'demo-user', contact_id: 2, phone: contacts[1].phone, direction: 'inbound', message: 'INFO', keyword_detected: 'INFO', auto_reply_sent: true, rule_triggered_id: 4, received_at: daysAgo(0), is_read: false },
+    { id: id(), user_id: 'demo-user', contact_id: 3, phone: contacts[2].phone, direction: 'inbound', message: 'STOP', keyword_detected: 'STOP', auto_reply_sent: true, rule_triggered_id: 1, received_at: daysAgo(0), is_read: true },
+    { id: id(), user_id: 'demo-user', contact_id: 5, phone: contacts[4].phone, direction: 'inbound', message: 'RDV', keyword_detected: 'RDV', auto_reply_sent: true, rule_triggered_id: 5, received_at: daysAgo(1), is_read: true },
+    { id: id(), user_id: 'demo-user', contact_id: 7, phone: contacts[6].phone, direction: 'inbound', message: 'Bonjour, je voudrais avoir plus d\'infos svp', auto_reply_sent: false, received_at: daysAgo(1), is_read: true },
+    { id: id(), user_id: 'demo-user', contact_id: 1, phone: contacts[0].phone, direction: 'outbound', message: '🔥 Black Friday ! -25% sur tout', auto_reply_sent: false, received_at: daysAgo(5), is_read: true },
+    { id: id(), user_id: 'demo-user', contact_id: 4, phone: contacts[3].phone, direction: 'inbound', message: 'YES', keyword_detected: 'OUI', auto_reply_sent: true, rule_triggered_id: 3, received_at: daysAgo(2), is_read: true },
+    { id: id(), user_id: 'demo-user', contact_id: 8, phone: contacts[7].phone, direction: 'inbound', message: 'Merci pour la promo !', auto_reply_sent: false, received_at: daysAgo(3), is_read: true },
   ]
 
   return {

@@ -54,6 +54,10 @@ export function DashboardPage() {
     totalDelivered: 0,
     totalCost: 0,
     deliveryRate: 0,
+    totalRead: 0,
+    totalClicked: 0,
+    totalReplied: 0,
+    totalOptOut: 0,
   }
 
   // Loading state
@@ -85,11 +89,11 @@ export function DashboardPage() {
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5)
 
-  // Calculs pour engagement (simulé en attendant vraies données)
-  const totalRead = Math.round((stats.totalDelivered || 0) * 0.65)
-  const totalClicked = Math.round(totalRead * 0.45)
-  const totalReplied = Math.round((stats.totalDelivered || 0) * 0.08)
-  const totalOptOut = Math.round((stats.totalDelivered || 0) * 0.02)
+  // Engagement réel depuis les données
+  const totalRead = stats.totalRead || 0
+  const totalClicked = stats.totalClicked || 0
+  const totalReplied = stats.totalReplied || 0
+  const totalOptOut = stats.totalOptOut || 0
 
   // Stats cards
   const statCards = [

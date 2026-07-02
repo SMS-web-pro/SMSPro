@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Zap,
   Plus,
@@ -372,7 +372,7 @@ function RuleFormModal({
   const [actions, setActions] = useState<AutoReplyAction[]>(rule?.actions || [])
 
   // Reset on open
-  useMemo(() => {
+  useEffect(() => {
     setKeyword(rule?.keyword || '')
     setMatchType(rule?.match_type || 'exact')
     setResponseMessage(rule?.response_message || '')

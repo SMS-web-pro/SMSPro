@@ -16,7 +16,9 @@ export const mockSegments: Segment[] = [
     description: 'Contacts ayant donné leur consentement',
     conditions: { opted_in: true },
     contact_count: 0,
+    is_active: true,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   },
   {
     id: 2,
@@ -25,7 +27,9 @@ export const mockSegments: Segment[] = [
     description: 'Contacts résidant à Bruxelles',
     conditions: { opted_in: true, city: 'Bruxelles' },
     contact_count: 0,
+    is_active: true,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   },
   {
     id: 3,
@@ -34,7 +38,9 @@ export const mockSegments: Segment[] = [
     description: 'Contacts taggés comme VIP',
     conditions: { opted_in: true, tags: ['VIP'] },
     contact_count: 0,
+    is_active: true,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   },
   {
     id: 4,
@@ -43,7 +49,9 @@ export const mockSegments: Segment[] = [
     description: 'Contacts ajoutés dans les 30 derniers jours',
     conditions: { opted_in: true, date_range: '30d' },
     contact_count: 0,
+    is_active: true,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   },
 ]
 

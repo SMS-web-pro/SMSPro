@@ -81,14 +81,15 @@ export function NewCampaignPage() {
     if (form.segmentType === 'segment') {
       const seg = segments.find((s) => s.id === form.segmentId)
       if (!seg) return []
-      if (form.segmentId === 2) return activeContacts.filter((c) => c.city === 'Bruxelles')
-      if (form.segmentId === 3) return activeContacts.filter((c) => c.tags.includes('VIP'))
-      if (form.segmentId === 4) {
-        const thirtyDaysAgo = new Date()
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-        return activeContacts.filter((c) => new Date(c.created_at) > thirtyDaysAgo)
-      }
-      return activeContacts
+      // Apply segment conditions dynamically
+      const conditions = seg.conditions as any
+      if (!conditions || Object.keys(conditions).length === 0) return activeContacts
+      return activeContacts.filter((c) => {
+        if (conditions.city && c.city !== conditions.city) return false
+        if (conditions.tag && !c.tags.includes(conditions.tag)) return false
+        if (conditions.min_created_at && new Date(c.created_at) < new Date(conditions.min_created_at)) return false
+        return true
+      })
     }
     return contacts.filter((c) => form.customContactIds.includes(c.id))
   }, [form.segmentType, form.segmentId, form.customContactIds, activeContacts, contacts, segments])
@@ -456,7 +457,7 @@ export function NewCampaignPage() {
                     </p>
                     {form.segmentType === 'segment' && (
                       <Select
-                        value={form.segmentId}
+                        value={String(form.segmentId)}
                         onChange={(e) => setForm({ ...form, segmentId: Number(e.target.value) })}
                         options={segments.map((s) => ({
                           value: String(s.id),

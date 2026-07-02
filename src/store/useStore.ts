@@ -165,6 +165,7 @@ export const useStore = create<AppState>()(
               name: result.user.name,
               role: (result.user.role as 'admin' | 'user') || 'admin',
               created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
             }
             set({ isAuthenticated: true, user })
             return { success: true }
@@ -357,8 +358,12 @@ export const useStore = create<AppState>()(
                     total_delivered: 0,
                     total_failed: 0,
                     total_pending: total,
+                    total_read: 0,
+                    total_clicked: 0,
                     total_cost: total * 0.08,
                     delivery_rate: 0,
+                    read_rate: 0,
+                    click_rate: 0,
                   },
                 }
               : c
@@ -378,8 +383,12 @@ export const useStore = create<AppState>()(
                     total_delivered: delivered,
                     total_failed: failed,
                     total_pending: 0,
+                    total_read: Math.round(delivered * 0.65),
+                    total_clicked: Math.round(delivered * 0.29),
                     total_cost: total * 0.08,
                     delivery_rate: total > 0 ? Math.round((delivered / total) * 10000) / 100 : 0,
+                    read_rate: delivered > 0 ? Math.round((Math.round(delivered * 0.65) / delivered) * 10000) / 100 : 0,
+                    click_rate: delivered > 0 ? Math.round((Math.round(delivered * 0.29) / delivered) * 10000) / 100 : 0,
                   },
                 }
               : c
@@ -470,6 +479,7 @@ export const useStore = create<AppState>()(
           used_at: new Date().toISOString(),
           source,
           campaign_id: campaignId,
+          created_at: new Date().toISOString(),
         }
         set((s) => ({
           couponUsages: [usage, ...s.couponUsages],
@@ -588,6 +598,7 @@ export const useStore = create<AppState>()(
         const contact = state.contacts.find((c) => c.phone === sanitizedPhone)
         const newMsg: InboxMessage = {
           id: nextId(),
+          user_id: state.user?.id || 'demo-user',
           phone: sanitizedPhone,
           direction: 'inbound',
           message: sanitizedMsg,
@@ -626,6 +637,7 @@ export const useStore = create<AppState>()(
             name: 'Utilisateur Démo',
             role: 'admin',
             created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           },
           contacts: data.contacts,
           campaigns: data.campaigns,

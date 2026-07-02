@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   Plus,
   Upload,
@@ -560,7 +560,7 @@ function ContactFormModal({
   const [error, setError] = useState('')
 
   // Reset when opening
-  useMemo(() => {
+  useEffect(() => {
     setForm({
       phone: contact?.phone || '',
       first_name: contact?.first_name || '',

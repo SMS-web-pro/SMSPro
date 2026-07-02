@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   language VARCHAR(5) DEFAULT 'fr',
   logo_url TEXT,
   twilio_config JSONB, -- {sid, phone}
+  sms_config JSONB, -- config SMS unifiée (twilio/telnyx)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -422,7 +423,15 @@ CREATE TRIGGER normalize_inbox_phone BEFORE INSERT OR UPDATE ON public.inbox_mes
 -- Fonction : mise à jour automatique des stats de campagne
 CREATE OR REPLACE FUNCTION public.update_campaign_stats()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_campaign_id BIGINT;
 BEGIN
+  v_campaign_id := COALESCE(NEW.campaign_id, OLD.campaign_id);
+
+  IF v_campaign_id IS NULL THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
   INSERT INTO public.campaign_stats (
     campaign_id,
     total_sent,
@@ -439,7 +448,7 @@ BEGIN
     updated_at
   )
   SELECT
-    NEW.campaign_id,
+    v_campaign_id,
     COUNT(*),
     COUNT(*) FILTER (WHERE status = 'delivered'),
     COUNT(*) FILTER (WHERE status IN ('failed', 'undelivered')),
@@ -461,7 +470,7 @@ BEGIN
       ELSE NULL END,
     NOW()
   FROM public.sms_logs
-  WHERE campaign_id = NEW.campaign_id
+  WHERE campaign_id = v_campaign_id
   ON CONFLICT (campaign_id)
   DO UPDATE SET
     total_sent = EXCLUDED.total_sent,
@@ -477,7 +486,7 @@ BEGIN
     avg_delivery_time = EXCLUDED.avg_delivery_time,
     updated_at = NOW();
 
-  RETURN NEW;
+  RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -733,6 +742,63 @@ BEGIN
     'discount_type', v_coupon.type,
     'discount_value', v_coupon.value
   );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Contrainte UNIQUE sur (invitation_id, phone) pour supporter l'upsert des réponses
+ALTER TABLE public.invitation_responses
+  ADD CONSTRAINT uq_invitation_responses_invitation_phone
+  UNIQUE (invitation_id, phone);
+
+-- Fonction : répondre à une invitation via lien public (anonyme, bypass RLS)
+CREATE OR REPLACE FUNCTION public.respond_to_invitation(
+  p_token VARCHAR(100),
+  p_phone VARCHAR(20),
+  p_response VARCHAR(20),
+  p_guests_count INTEGER DEFAULT 1,
+  p_notes TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_invitation RECORD;
+BEGIN
+  SELECT id, status, response_deadline, max_guests
+  INTO v_invitation
+  FROM public.invitations
+  WHERE unique_token = p_token;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'Invitation introuvable');
+  END IF;
+
+  IF v_invitation.status != 'active' THEN
+    RETURN jsonb_build_object('error', 'Cette invitation n''est plus active');
+  END IF;
+
+  IF v_invitation.response_deadline IS NOT NULL AND v_invitation.response_deadline < NOW() THEN
+    RETURN jsonb_build_object('error', 'La date limite de réponse a été dépassée');
+  END IF;
+
+  IF p_response NOT IN ('accepted', 'declined', 'maybe') THEN
+    RETURN jsonb_build_object('error', 'Réponse invalide');
+  END IF;
+
+  IF p_guests_count < 1 OR p_guests_count > v_invitation.max_guests THEN
+    RETURN jsonb_build_object('error', 'Nombre d''invités invalide');
+  END IF;
+
+  INSERT INTO public.invitation_responses (
+    invitation_id, phone, response, guests_count, notes, responded_at
+  ) VALUES (
+    v_invitation.id, p_phone, p_response, p_guests_count, p_notes, NOW()
+  )
+  ON CONFLICT (invitation_id, phone) DO UPDATE SET
+    response = p_response,
+    guests_count = p_guests_count,
+    notes = p_notes,
+    responded_at = NOW();
+
+  RETURN jsonb_build_object('success', true);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

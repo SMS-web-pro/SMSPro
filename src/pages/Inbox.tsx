@@ -402,7 +402,6 @@ export function InboxPage() {
                         }
                         await sendReply([contact.id], replyText.trim())
                         setReplyText('')
-                        addToast({ type: 'success', title: 'SMS envoyé' })
                         refresh()
                       }}
                     >

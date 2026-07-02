@@ -3,7 +3,13 @@ export type User = {
   email: string
   name: string
   role: 'admin' | 'user'
+  company_name?: string
+  timezone?: string
+  language?: string
+  logo_url?: string
+  twilio_config?: Record<string, any>
   created_at: string
+  updated_at: string
 }
 
 export type Contact = {
@@ -32,18 +38,24 @@ export type Segment = {
   description?: string
   conditions: Record<string, any>
   contact_count: number
+  is_active: boolean
   created_at: string
+  updated_at: string
 }
 
-export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'paused'
 
 export type CampaignStats = {
   total_sent: number
   total_delivered: number
   total_failed: number
   total_pending: number
+  total_read: number
+  total_clicked: number
   total_cost: number
   delivery_rate: number
+  read_rate: number
+  click_rate: number
 }
 
 export type Campaign = {
@@ -51,6 +63,8 @@ export type Campaign = {
   user_id: string
   name: string
   message: string
+  message_template?: string
+  personalize?: boolean
   segment_id?: number
   status: CampaignStatus
   scheduled_at?: string
@@ -60,7 +74,7 @@ export type Campaign = {
   created_at: string
 }
 
-export type SMSStatus = 'queued' | 'sent' | 'delivered' | 'failed' | 'undelivered'
+export type SMSStatus = 'queued' | 'sending' | 'sent' | 'delivered' | 'failed' | 'undelivered'
 
 /**
  * Engagement du destinataire avec le SMS
@@ -71,7 +85,7 @@ export type SMSStatus = 'queued' | 'sent' | 'delivered' | 'failed' | 'undelivere
  * - opted_out : STOP reçu
  */
 export type SMSEngagement = {
-  read_at?: string // Date du clic = équivalent "lu"
+  read_at?: string
   clicked_at?: string
   clicked_url?: string
   replies?: Array<{ text: string; received_at: string }>
@@ -79,12 +93,13 @@ export type SMSEngagement = {
 
 export type SMSLog = {
   id: number
-  campaign_id: number
+  campaign_id?: number
   contact_id?: number
   phone: string
   message: string
   message_sid?: string
   status: SMSStatus
+  provider?: string
   error_code?: string
   error_message?: string
   cost: number
@@ -92,8 +107,7 @@ export type SMSLog = {
   delivered_at?: string
   failed_at?: string
   created_at: string
-  // Engagement tracking
-  tracking_id?: string // ID unique pour le lien tracké
+  tracking_id?: string
   engagement?: SMSEngagement
 }
 
@@ -111,14 +125,14 @@ export type Toast = {
 export type AutoReplyRule = {
   id: number
   user_id: string
-  keyword: string // Mot-clé déclencheur (insensible à la casse)
+  keyword: string
   match_type: 'exact' | 'contains' | 'starts_with'
   response_message: string
   description?: string
-  trigger_count: number // Nombre de fois déclenchée
+  trigger_count: number
   is_active: boolean
   case_sensitive: boolean
-  actions?: AutoReplyAction[] // Actions à exécuter en plus de la réponse
+  actions?: AutoReplyAction[]
   created_at: string
   updated_at: string
 }
@@ -148,19 +162,20 @@ export const isTagAction = (a: AutoReplyAction): a is Extract<AutoReplyAction, {
 export type Coupon = {
   id: number
   user_id: string
-  code: string // Code unique (ex: PROMO20)
-  campaign_id?: number // Campagne source
+  code: string
+  campaign_id?: number
   type: 'percentage' | 'fixed_amount' | 'free_shipping' | 'gift'
-  value: number // % ou montant en €
+  value: number
   description?: string
+  terms?: string
   valid_from: string
   valid_until: string
-  max_uses?: number // null = illimité
+  max_uses?: number
   current_uses: number
-  per_contact_limit: number // Nombre d'utilisations max par contact
+  per_contact_limit: number
   is_active: boolean
-  terms?: string
   created_at: string
+  updated_at: string
 }
 
 /**
@@ -173,9 +188,10 @@ export type CouponUsage = {
   phone: string
   coupon_code: string
   used_at: string
-  order_value?: number // Valeur de commande (optionnel)
-  source: 'sms_campaign' | 'manual' | 'import'
+  order_value?: number
+  source: 'sms_campaign' | 'manual' | 'import' | 'api'
   campaign_id?: number
+  created_at: string
 }
 
 /**
@@ -188,11 +204,12 @@ export type Invitation = {
   title: string
   description?: string
   type: 'event' | 'appointment' | 'offer' | 'vip' | 'reminder'
-  event_date?: string // Date de l'événement
+  event_date?: string
   location?: string
-  unique_token: string // Token unique pour le lien
-  max_guests?: number
+  unique_token: string
+  max_guests: number
   response_deadline?: string
+  is_rsvp: boolean
   status: 'active' | 'closed' | 'expired'
   responses: InvitationResponse[]
   created_at: string
@@ -217,11 +234,12 @@ export type InvitationResponse = {
  */
 export type InboxMessage = {
   id: number
+  user_id: string
   contact_id?: number
   phone: string
   direction: 'inbound' | 'outbound'
   message: string
-  keyword_detected?: string // Mot-clé détecté si applicable
+  keyword_detected?: string
   auto_reply_sent?: boolean
   rule_triggered_id?: number
   received_at: string

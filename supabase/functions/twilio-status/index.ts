@@ -14,6 +14,41 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
 
+// Vérifier la signature HMAC-SHA1 de Twilio
+async function verifyTwilioSignature(
+  signature: string,
+  url: string,
+  params: Record<string, string>,
+  authToken: string
+): Promise<boolean> {
+  // Construire la chaîne de validation : URL triée + params triés
+  const sortedKeys = Object.keys(params).sort()
+  let data = url
+  for (const key of sortedKeys) {
+    data += key + params[key]
+  }
+
+  // HMAC-SHA1
+  const encoder = new TextEncoder()
+  const keyData = encoder.encode(authToken)
+  const dataData = encoder.encode(data)
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign']
+  )
+
+  const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, dataData)
+  const computedSignature = btoa(
+    String.fromCharCode(...new Uint8Array(signatureBuffer))
+  )
+
+  return computedSignature === signature
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS })
@@ -25,7 +60,7 @@ Deno.serve(async (req) => {
 
   try {
     const contentType = req.headers.get('content-type') || ''
-    let payload: any
+    let payload: Record<string, string> = {}
 
     if (contentType.includes('application/x-www-form-urlencoded')) {
       const formData = await req.formData()
@@ -40,6 +75,47 @@ Deno.serve(async (req) => {
 
     if (!payload.MessageSid || !payload.MessageStatus) {
       return new Response('Missing required fields', { status: 400, headers: CORS_HEADERS })
+    }
+
+    // Vérifier la signature Twilio
+    const twilioSignature = req.headers.get('x-twilio-signature')
+    if (twilioSignature) {
+      // Trouver le propriétaire du numéro pour récupérer l'auth token
+      const { data: smsLog } = await supabase
+        .from('sms_logs')
+        .select('contact_id')
+        .eq('message_sid', payload.MessageSid)
+        .single()
+
+      if (smsLog?.contact_id) {
+        const { data: contact } = await supabase
+          .from('contacts')
+          .select('user_id')
+          .eq('id', smsLog.contact_id)
+          .single()
+
+        if (contact?.user_id) {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('twilio_config')
+            .eq('id', contact.user_id)
+            .single()
+
+          const authToken = profile?.twilio_config?.twilio?.authToken
+          if (authToken) {
+            const requestUrl = req.url
+            const isValid = await verifyTwilioSignature(twilioSignature, requestUrl, payload, authToken)
+            if (!isValid) {
+              console.error('Invalid Twilio signature')
+              return new Response('Invalid signature', { status: 403, headers: CORS_HEADERS })
+            }
+          } else {
+            console.warn('No auth token found, skipping signature verification')
+          }
+        }
+      }
+    } else {
+      console.warn('No X-Twilio-Signature header, skipping verification')
     }
 
     const status = payload.MessageStatus.toLowerCase()

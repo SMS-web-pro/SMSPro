@@ -92,7 +92,8 @@ export function useContacts() {
   const fetcher = useCallback(async () => {
     if (isDemo) return { data: demoContacts, error: null }
     return fetchContactsAPI()
-  }, [isDemo, demoContacts])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo])
 
   return useFetch(fetcher, [isDemo])
 }
@@ -104,7 +105,8 @@ export function useCampaigns() {
   const fetcher = useCallback(async () => {
     if (isDemo) return { data: demoCampaigns, error: null }
     return fetchCampaignsAPI()
-  }, [isDemo, demoCampaigns])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo])
 
   return useFetch(fetcher, [isDemo])
 }
@@ -116,7 +118,8 @@ export function useAutoReplyRules() {
   const fetcher = useCallback(async () => {
     if (isDemo) return { data: demoRules, error: null }
     return fetchAutoReplyAPI()
-  }, [isDemo, demoRules])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo])
 
   return useFetch(fetcher, [isDemo])
 }
@@ -128,7 +131,8 @@ export function useCoupons() {
   const fetcher = useCallback(async () => {
     if (isDemo) return { data: demoCoupons, error: null }
     return fetchCouponsAPI()
-  }, [isDemo, demoCoupons])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo])
 
   return useFetch(fetcher, [isDemo])
 }
@@ -140,7 +144,8 @@ export function useInvitations() {
   const fetcher = useCallback(async () => {
     if (isDemo) return { data: demoInvitations, error: null }
     return fetchInvitationsAPI()
-  }, [isDemo, demoInvitations])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo])
 
   return useFetch(fetcher, [isDemo])
 }
@@ -152,7 +157,8 @@ export function useInbox() {
   const fetcher = useCallback(async () => {
     if (isDemo) return { data: demoInbox, error: null }
     return fetchInboxAPI()
-  }, [isDemo, demoInbox])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo])
 
   return useFetch(fetcher, [isDemo])
 }
@@ -171,16 +177,23 @@ export function useDashboardStats() {
       const totalSent = allStats.reduce((s, x) => s + x.total_sent, 0)
       const totalDelivered = allStats.reduce((s, x) => s + x.total_delivered, 0)
       const totalCost = allStats.reduce((s, x) => s + x.total_cost, 0)
+      const totalRead = allStats.reduce((s, x) => s + (x.total_read || 0), 0)
+      const totalClicked = allStats.reduce((s, x) => s + (x.total_clicked || 0), 0)
       const deliveryRate = totalSent > 0
         ? Math.round((totalDelivered / totalSent) * 10000) / 100
         : 0
       return {
-        data: { totalContacts, activeContacts, totalCampaigns, totalSent, totalDelivered, totalCost, deliveryRate },
+        data: {
+          totalContacts, activeContacts, totalCampaigns,
+          totalSent, totalDelivered, totalCost, deliveryRate,
+          totalRead, totalClicked, totalReplied: 0, totalOptOut: 0,
+        },
         error: null,
       }
     }
     return fetchDashboardStatsAPI()
-  }, [isDemo, demoContacts, demoCampaigns])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo])
 
   return useFetch(fetcher, [isDemo])
 }

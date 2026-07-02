@@ -30,6 +30,7 @@ import {
   Send,
 } from 'lucide-react'
 
+import { cn } from '@/utils/cn'
 import { useStore } from '@/store/useStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -120,9 +121,6 @@ export function SettingsPage() {
     </div>
   )
 }
-
-// (cn est dans utils)
-function cn(...classes: any[]) { return classes.filter(Boolean).join(' ') }
 
 // ====================== TAB: COMPTE (SIMPLIFIÉ) ======================
 function AccountTab() {
@@ -319,11 +317,23 @@ function SupabaseTab() {
   }
 
   const handleTest = async () => {
-    await testConnection(form.url, form.key)
-    if (status === 'connected') {
-      addToast({ type: 'success', title: 'Connexion Supabase OK ✓' })
-    } else if (status === 'error') {
+    setTesting(true)
+    try {
+      const response = await fetch(`${form.url}/rest/v1/`, {
+        headers: { apikey: form.key, Authorization: `Bearer ${form.key}` },
+      })
+      const ok = response.ok || response.status === 404
+      setStatus(ok ? 'connected' : 'error')
+      if (ok) {
+        addToast({ type: 'success', title: 'Connexion Supabase OK ✓' })
+      } else {
+        addToast({ type: 'error', title: 'Connexion échouée', description: 'Vérifiez URL et clé' })
+      }
+    } catch {
+      setStatus('error')
       addToast({ type: 'error', title: 'Connexion échouée', description: 'Vérifiez URL et clé' })
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -1107,8 +1117,6 @@ function ActionCard({
 }
 
 // ====================== DatabaseSetupInner (copié collé) ======================
-// Note : composant long - extraction séparée pour clarté
-// Note : composant long - extraction séparée pour clarté
 
 function DatabaseSetupInner() {
   const [activeTab, setActiveTab] = useState<'schema' | 'seed'>('schema')
