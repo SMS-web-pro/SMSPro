@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useCampaigns, useCampaignMutations, useContacts as useContactsApi } from '@/hooks/useApi'
+import { fetchCampaignLogsAPI } from '@/lib/apiClient'
 import { formatCurrency, formatDate, formatPhoneBelgium, formatRelativeDate } from '@/lib/utils'
 import { EngagementTracker, computeEngagement } from '@/components/campaigns/EngagementTracker'
 import { cn } from '@/utils/cn'
@@ -62,9 +63,18 @@ export function CampaignDetailPage() {
 
   const campaign = campaigns.find((c) => c.id === Number(id))
 
+  const [realLogs, setRealLogs] = useState<SMSLog[]>([])
+  useEffect(() => {
+    if (campaign?.id) {
+      fetchCampaignLogsAPI(campaign.id).then(({ data }) => {
+        if (data) setRealLogs(data as SMSLog[])
+      })
+    }
+  }, [campaign?.id])
+
     // Génère les SMS logs à partir des statistiques de la campagne
     // (vraies données récupérées via l'API en production)
-  const campaignLogs: SMSLog[] = useMemo(() => {
+  const synthesizedLogs: SMSLog[] = useMemo(() => {
     if (!campaign || !campaign.stats) return []
     const logs: SMSLog[] = []
     const totalContacts = Math.min(campaign.stats.total_sent, contacts.length)
@@ -88,6 +98,8 @@ export function CampaignDetailPage() {
     }
     return logs
   }, [campaign, contacts])
+
+  const campaignLogs = realLogs.length > 0 ? realLogs : synthesizedLogs
 
   const filteredLogs = useMemo(() => {
     let logs = [...campaignLogs]

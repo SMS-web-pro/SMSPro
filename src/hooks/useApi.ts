@@ -22,6 +22,7 @@ import {
   fetchInboxAPI,
   fetchDashboardStatsAPI,
   fetchTimelineAPI,
+  fetchSegmentsAPI,
   createContactAPI,
   createCampaignAPI,
   createAutoReplyAPI,
@@ -32,11 +33,13 @@ import {
   deleteAutoReplyAPI,
   updateAutoReplyAPI,
   deleteCouponAPI,
+  updateCouponAPI,
   deleteInvitationAPI,
   updateContactAPI,
   markInboxReadAPI,
   sendSMS,
 } from '@/lib/apiClient'
+import { mockSegments } from '@/lib/mockData'
 
 interface UseApiState<T> {
   data: T | null
@@ -203,6 +206,17 @@ export function useTimeline() {
   return useFetch(fetcher, [isDemo])
 }
 
+export function useSegments() {
+  const isDemo = useStore((s) => s.isDemo)
+
+  const fetcher = useCallback(async () => {
+    if (isDemo) return { data: mockSegments, error: null }
+    return fetchSegmentsAPI()
+  }, [isDemo])
+
+  return useFetch(fetcher, [isDemo])
+}
+
 // =====================================================
 // MUTATIONS
 // =====================================================
@@ -336,6 +350,7 @@ export function useAutoReplyMutations() {
 export function useCouponMutations() {
   const isDemo = useStore((s) => s.isDemo)
   const demoAdd = useStore((s) => s.addCoupon)
+  const demoUpdate = useStore((s) => s.updateCoupon)
   const demoDelete = useStore((s) => s.deleteCoupon)
   const addToast = useStore((s) => s.addToast)
 
@@ -349,6 +364,17 @@ export function useCouponMutations() {
       const result = await createCouponAPI(coupon)
       if (result.error) addToast({ type: 'error', title: 'Erreur', description: result.error })
       else addToast({ type: 'success', title: 'Coupon créé' })
+      return result
+    },
+    update: async (id: number, updates: any) => {
+      if (isDemo) {
+        demoUpdate(id, updates)
+        addToast({ type: 'success', title: 'Coupon modifié (démo)' })
+        return { data: updates, error: null }
+      }
+      const result = await updateCouponAPI(id, updates)
+      if (result.error) addToast({ type: 'error', title: 'Erreur', description: result.error })
+      else addToast({ type: 'success', title: 'Coupon modifié' })
       return result
     },
     remove: async (id: number) => {

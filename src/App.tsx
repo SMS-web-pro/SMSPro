@@ -13,6 +13,7 @@ import { InboxPage } from '@/pages/Inbox'
 import { AutoReplyPage } from '@/pages/AutoReply'
 import { CouponsPage } from '@/pages/Coupons'
 import { InvitationsPage } from '@/pages/Invitations'
+import InvitationPublicPage from '@/pages/InvitationPublic'
 import { UserGuidePage } from '@/pages/UserGuide'
 import { SetupWizardPage } from '@/pages/SetupWizard'
 import { useStore } from '@/store/useStore'
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
           <Route path="/setup" element={<SetupWizardPage />} />
+          <Route path="/i/:token" element={<InvitationPublicPage />} />
 
           {/* Routes protégées */}
           <Route

@@ -43,7 +43,7 @@ export function DashboardPage() {
   // Chargement depuis l'API
   const { data: statsData, loading: loadingStats, error: errorStats, refresh: refreshStats } = useDashboardStats()
   const { data: apiCampaigns, loading: loadingCampaigns, refresh: refreshCampaigns } = useCampaigns()
-  const { data: timelineData } = useTimeline()
+  const { data: timelineData, refresh: refreshTimeline } = useTimeline()
 
   const campaigns = apiCampaigns || []
   const stats = statsData || {
@@ -144,6 +144,7 @@ export function DashboardPage() {
           onClick={() => {
             refreshStats()
             refreshCampaigns()
+            refreshTimeline()
           }}
           leftIcon={<RefreshCw className="h-4 w-4" />}
         >

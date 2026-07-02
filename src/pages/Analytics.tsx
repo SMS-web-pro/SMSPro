@@ -40,7 +40,7 @@ import { generateTimelineData } from '@/lib/mockData'
 export function AnalyticsPage() {
   // API réelle
   const { data: stats, loading, error, refresh } = useDashboardStats()
-  const { data: apiCampaigns, loading: loadingCampaigns } = useCampaigns()
+  const { data: apiCampaigns, loading: loadingCampaigns, refresh: refreshCampaigns } = useCampaigns()
 
   const campaigns = apiCampaigns || []
 
@@ -91,7 +91,7 @@ export function AnalyticsPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={refresh}
+          onClick={() => { refresh(); refreshCampaigns() }}
           leftIcon={<RefreshCw className="h-4 w-4" />}
         >
           Actualiser

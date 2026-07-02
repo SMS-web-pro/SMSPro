@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { cn } from '@/utils/cn'
 import { formatRelativeDate, formatPhoneInternational } from '@/lib/utils'
-import { useInbox, useInboxMutations, useContacts } from '@/hooks/useApi'
+import { useInbox, useInboxMutations, useContacts, useSendSMS } from '@/hooks/useApi'
 
 type Filter = 'all' | 'unread' | 'auto' | 'manual'
 
@@ -43,6 +43,8 @@ export function InboxPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const sendReply = useSendSMS()
 
   // Filtrage et tri
   const filteredMessages = useMemo(() => {
@@ -305,13 +307,13 @@ export function InboxPage() {
                     <Button
                       size="sm"
                       leftIcon={<Reply className="h-3.5 w-3.5" />}
-                      onClick={() =>
+                      onClick={() => {
                         addToast({
                           type: 'info',
-                          title: 'Réponse manuelle',
-                          description: 'Ouvrez un contact pour répondre directement',
+                          title: 'Réponse rapide',
+                          description: 'Sélectionnez un message et utilisez le champ de réponse en dessous',
                         })
-                      }
+                      }}
                     >
                       Répondre
                     </Button>
@@ -385,9 +387,27 @@ export function InboxPage() {
                     <textarea
                       placeholder="Tapez votre réponse..."
                       rows={2}
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
                       className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-500 resize-none"
                     />
-                    <Button leftIcon={<Send className="h-4 w-4" />}>Envoyer</Button>
+                    <Button
+                      leftIcon={<Send className="h-4 w-4" />}
+                      onClick={async () => {
+                        if (!replyText.trim() || !selected) return
+                        const contact = contacts.find(c => c.phone === selected.phone)
+                        if (!contact) {
+                          addToast({ type: 'error', title: 'Contact non trouvé', description: 'Ce numéro n\'est pas dans vos contacts' })
+                          return
+                        }
+                        await sendReply([contact.id], replyText.trim())
+                        setReplyText('')
+                        addToast({ type: 'success', title: 'SMS envoyé' })
+                        refresh()
+                      }}
+                    >
+                      Envoyer
+                    </Button>
                   </div>
                   <p className="mt-2 text-[10px] text-slate-500">
                     💡 Vous pouvez aussi configurer un auto-répondeur pour ce mot-clé dans la section dédiée

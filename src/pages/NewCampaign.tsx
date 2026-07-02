@@ -18,10 +18,8 @@ import { Button } from '@/components/ui/Button'
 import { Input, Textarea, Select } from '@/components/ui/Input'
 import { cn } from '@/utils/cn'
 import { calculateSMSCount, formatCurrency, personalizeMessage } from '@/lib/utils'
-import { mockSegments } from '@/lib/mockData'
-import { useCampaignMutations, useContacts as useContactsApi, useSendSMS } from '@/hooks/useApi'
-// Active l'import pour éviter tree-shake
-void useContactsApi
+import { useCampaignMutations, useContacts as useContactsApi, useSendSMS, useSegments } from '@/hooks/useApi'
+import { testSMSConnection } from '@/lib/apiClient'
 
 const TEMPLATES = [
   { id: 't1', label: 'Promotion', icon: '🎉', text: 'Bonjour {prenom}, profitez de -20% sur toute la collection avec le code PROMO20. Valable jusqu\'au 31/12 !' },
@@ -49,6 +47,7 @@ export function NewCampaignPage() {
   const [step, setStep] = useState(1)
   const [sending, setSending] = useState(false)
   const [testSent, setTestSent] = useState(false)
+  const [sendingTest, setSendingTest] = useState(false)
   const [testPhone, setTestPhone] = useState('')
 
   const [form, setForm] = useState({
@@ -63,7 +62,19 @@ export function NewCampaignPage() {
   })
 
   const activeContacts = useMemo(() => contacts.filter((c) => c.opted_in), [contacts])
-  const segments = mockSegments
+  const { data: segmentsData } = useSegments()
+  const segments = segmentsData || []
+  const [contactSearch, setContactSearch] = useState('')
+
+  const filteredContactsForPicker = useMemo(() => {
+    if (!contactSearch) return activeContacts
+    const q = contactSearch.toLowerCase()
+    return activeContacts.filter((c) =>
+      (c.first_name || '').toLowerCase().includes(q) ||
+      (c.last_name || '').toLowerCase().includes(q) ||
+      c.phone.includes(q)
+    )
+  }, [activeContacts, contactSearch])
 
   const targetContacts = useMemo(() => {
     if (form.segmentType === 'all') return activeContacts
@@ -119,16 +130,25 @@ export function NewCampaignPage() {
     setStep(step + 1)
   }
 
-  const handleSendTest = () => {
+  const handleSendTest = async () => {
     if (!testPhone) {
       addToast({ type: 'error', title: 'Numéro requis' })
       return
     }
-    setTestSent(false)
-    setTimeout(() => {
-      setTestSent(true)
-      addToast({ type: 'success', title: 'SMS test envoyé !', description: `Vérifiez le ${testPhone}` })
-    }, 1000)
+    setSendingTest(true)
+    try {
+      const result = await testSMSConnection('twilio', testPhone)
+      if (result.data?.success) {
+        setTestSent(true)
+        addToast({ type: 'success', title: 'SMS de test envoyé', description: `Vérifiez le ${testPhone}` })
+      } else {
+        addToast({ type: 'error', title: 'Échec', description: result.data?.error || result.error || 'Erreur inconnue' })
+      }
+    } catch (err) {
+      addToast({ type: 'error', title: 'Erreur', description: (err as Error).message })
+    } finally {
+      setSendingTest(false)
+    }
   }
 
   const handleSend = async () => {
@@ -286,7 +306,7 @@ export function NewCampaignPage() {
                 <div className="flex items-center justify-between mt-1.5">
                   <div className="flex items-center gap-2">
                     <p className="text-xs text-slate-500">
-                      {form.message.length} / 160 caractères
+                      {form.message.length} / 1600 caractères · {smsCount} SMS
                     </p>
                     {smsCount > 1 && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-medium">
@@ -383,7 +403,7 @@ export function NewCampaignPage() {
                       'h-full transition-all',
                       form.message.length > 160 ? 'bg-amber-500' : 'bg-primary-500'
                     )}
-                    style={{ width: `${Math.min(100, (form.message.length / 160) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (form.message.length / 1600) * 100)}%` }}
                   />
                 </div>
               </CardContent>
@@ -461,6 +481,39 @@ export function NewCampaignPage() {
                     </p>
                   </div>
                 </label>
+                {form.segmentType === 'custom' && (
+                  <div className="mt-3 border border-slate-200 rounded-lg max-h-60 overflow-y-auto">
+                    <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
+                      <input
+                        type="text"
+                        placeholder="Rechercher un contact..."
+                        className="w-full text-sm px-3 py-1.5 border border-slate-200 rounded-md"
+                        value={contactSearch}
+                        onChange={(e) => setContactSearch(e.target.value)}
+                      />
+                    </div>
+                    {filteredContactsForPicker.map((contact) => (
+                      <label key={contact.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0">
+                        <input
+                          type="checkbox"
+                          checked={form.customContactIds.includes(contact.id)}
+                          onChange={(e) => {
+                            const ids = e.target.checked
+                              ? [...form.customContactIds, contact.id]
+                              : form.customContactIds.filter((id) => id !== contact.id)
+                            setForm({ ...form, customContactIds: ids })
+                          }}
+                          className="rounded border-slate-300"
+                        />
+                        <span className="text-sm">{contact.first_name || ''} {contact.last_name || ''}</span>
+                        <span className="text-xs text-slate-400 ml-auto">{contact.phone}</span>
+                      </label>
+                    ))}
+                    {filteredContactsForPicker.length === 0 && (
+                      <p className="text-sm text-slate-500 text-center py-4">Aucun contact trouvé</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -558,7 +611,7 @@ export function NewCampaignPage() {
                   placeholder="+32470123456"
                   className="flex-1"
                 />
-                <Button variant="outline" onClick={handleSendTest} disabled={testSent}>
+                <Button variant="outline" onClick={handleSendTest} disabled={testSent || sendingTest} loading={sendingTest}>
                   {testSent ? <><Check className="h-4 w-4" /> Envoyé</> : 'Envoyer test'}
                 </Button>
               </div>

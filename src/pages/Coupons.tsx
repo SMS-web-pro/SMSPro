@@ -32,6 +32,7 @@ import { cn } from '@/utils/cn'
 import { formatCurrency } from '@/lib/utils'
 import { useStore } from '@/store/useStore'
 import { useCoupons, useCouponMutations, useContacts as useContactsApi } from '@/hooks/useApi'
+import { getSupabase } from '@/lib/supabaseClient'
 
 const typeConfig = {
   percentage: { icon: Percent, label: 'Pourcentage', color: 'blue', example: '-20%' },
@@ -46,6 +47,7 @@ export function CouponsPage() {
   const { data: apiContacts } = useContactsApi()
   const mutations = useCouponMutations()
   const addToast = useStore((s) => s.addToast)
+  const isDemo = useStore((s) => s.isDemo)
 
   const coupons = apiCoupons || []
   const contacts = apiContacts || []
@@ -134,17 +136,46 @@ export function CouponsPage() {
       return
     }
 
-    // En démo on simule, en prod on utilise la RPC Supabase
-    const coupon = coupons.find((c: any) => c.code === testCode.toUpperCase())
-    if (coupon) {
+    if (isDemo) {
+      const coupon = coupons.find((c: any) => c.code === testCode.toUpperCase())
+      if (coupon) {
+        addToast({
+          type: 'success',
+          title: 'Coupon utilisé !',
+          description: `${coupon.code} appliqué au contact`,
+        })
+        refresh()
+      } else {
+        addToast({ type: 'error', title: 'Code invalide' })
+      }
+      return
+    }
+
+    const client = getSupabase()
+    if (!client) {
+      addToast({ type: 'error', title: 'Supabase non configuré' })
+      return
+    }
+
+    const { data, error } = await client.rpc('use_coupon', {
+      p_code: testCode,
+      p_contact_id: testContactId,
+      p_source: 'manual',
+      p_campaign_id: null,
+      p_order_value: 0,
+    })
+
+    if (error) {
+      addToast({ type: 'error', title: 'Erreur', description: error.message })
+    } else if (data?.success) {
       addToast({
         type: 'success',
         title: 'Coupon utilisé !',
-        description: `${coupon.code} appliqué au contact`,
+        description: `${testCode} appliqué au contact`,
       })
       refresh()
     } else {
-      addToast({ type: 'error', title: 'Code invalide' })
+      addToast({ type: 'error', title: 'Échec', description: data?.reason || 'Code invalide' })
     }
   }
 
@@ -488,7 +519,7 @@ function CouponStatusBadge({ coupon }: { coupon: any }) {
 }
 
 function CouponFormModal({
-  open: _open,
+  open,
   onClose,
   onSave,
 }: {
@@ -507,6 +538,8 @@ function CouponFormModal({
     per_contact_limit: 1,
     terms: '',
   })
+
+  if (!open) return null
 
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

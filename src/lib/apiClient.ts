@@ -307,6 +307,18 @@ export async function deleteCouponAPI(id: number) {
   return { data: null, error: error?.message || null }
 }
 
+export async function updateCouponAPI(id: number, updates: Partial<any>) {
+  const client = getSupabase()
+  if (!client) return { data: null, error: 'Supabase non configuré' }
+  const { data, error } = await client
+    .from('coupons')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+  return { data, error: error?.message || null }
+}
+
 // =====================================================
 // INVITATIONS
 // =====================================================
@@ -317,10 +329,15 @@ export async function fetchInvitationsAPI() {
 
   const { data, error } = await client
     .from('invitations')
-    .select('*')
+    .select('*, responses:invitation_responses(*)')
     .order('created_at', { ascending: false })
 
-  return { data, error: error?.message || null }
+  const mapped = (data || []).map(inv => ({
+    ...inv,
+    responses: inv.responses || []
+  }))
+
+  return { data: mapped, error: error?.message || null }
 }
 
 export async function createInvitationAPI(invitation: any) {
@@ -339,7 +356,6 @@ export async function createInvitationAPI(invitation: any) {
       user_id: user.id,
       unique_token: token,
       status: 'active',
-      responses: [],
     })
     .select()
     .single()
@@ -561,6 +577,21 @@ export async function fetchTimelineAPI() {
   }
 
   return { data: result, error: null }
+}
+
+/**
+ * Récupère les segments
+ */
+export async function fetchSegmentsAPI() {
+  const client = getSupabase()
+  if (!client) return { data: null, error: 'Supabase non configuré' }
+
+  const { data, error } = await client
+    .from('segments')
+    .select('*')
+    .order('name')
+
+  return { data, error: error?.message || null }
 }
 
 /**

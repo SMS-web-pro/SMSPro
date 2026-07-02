@@ -17,6 +17,7 @@ import {
   XCircle,
   Hash,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -88,9 +89,14 @@ export function AutoReplyPage() {
             Configurez des réponses automatiques pour les mots-clés reçus par SMS
           </p>
         </div>
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
-          Nouvelle règle
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => refresh()}>
+            Actualiser
+          </Button>
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>
+            Nouvelle règle
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}

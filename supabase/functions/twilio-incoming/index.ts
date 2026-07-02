@@ -130,9 +130,11 @@ Deno.serve(async (req) => {
       inboxEntry.contact_id = contactId
     }
 
-    const { error: inboxError } = await supabase
+    const { data: insertedMessage, error: inboxError } = await supabase
       .from('inbox_messages')
       .insert(inboxEntry)
+      .select('id')
+      .single()
 
     if (inboxError) {
       console.error('Inbox insert error:', inboxError)
@@ -149,7 +151,7 @@ Deno.serve(async (req) => {
       if (rules && rules.length > 0) {
         const messageLower = body.toLowerCase().trim()
         for (const rule of rules) {
-          const keywords = (rule.trigger_keyword || '').toLowerCase().split(',').map((k: string) => k.trim())
+          const keywords = (rule.keyword || '').toLowerCase().split(',').map((k: string) => k.trim())
           if (keywords.some((kw: string) => messageLower.includes(kw))) {
             // Envoyer la réponse automatique
             const { data: profile } = await supabase
@@ -172,7 +174,7 @@ Deno.serve(async (req) => {
                 const formData = new URLSearchParams()
                 formData.append('To', normalizedPhone)
                 formData.append('From', senderNumber)
-                formData.append('Body', rule.reply_message)
+                formData.append('Body', rule.response_message)
 
                 await fetch(url, {
                   method: 'POST',
@@ -183,19 +185,64 @@ Deno.serve(async (req) => {
                   body: formData.toString(),
                 })
 
-                // Mettre à jour le compteur
-                await supabase
-                  .from('auto_reply_rules')
-                  .update({ trigger_count: (rule.trigger_count || 0) + 1 })
-                  .eq('id', rule.id)
+                // Marquer comme auto-reply dans inbox (only the specific message)
+                if (insertedMessage?.id) {
+                  await supabase
+                    .from('inbox_messages')
+                    .update({ auto_reply_sent: true })
+                    .eq('id', insertedMessage.id)
+                }
 
-                // Marquer comme auto-reply dans inbox
-                await supabase
-                  .from('inbox_messages')
-                  .update({ auto_reply_sent: true })
-                  .eq('phone', normalizedPhone)
-                  .eq('direction', 'inbound')
-                  .eq('is_read', false)
+                // Execute rule actions
+                if (rule.actions && Array.isArray(rule.actions) && contactId) {
+                  for (const action of rule.actions) {
+                    if (action.type === 'opt_out') {
+                      await supabase
+                        .from('contacts')
+                        .update({ opted_in: false })
+                        .eq('id', contactId)
+                    } else if (action.type === 'opt_in') {
+                      await supabase
+                        .from('contacts')
+                        .update({ opted_in: true })
+                        .eq('id', contactId)
+                    } else if (action.type === 'add_tag' && action.tag) {
+                      const { data: contact } = await supabase
+                        .from('contacts')
+                        .select('tags')
+                        .eq('id', contactId)
+                        .single()
+                      const existingTags = contact?.tags || []
+                      if (!existingTags.includes(action.tag)) {
+                        await supabase
+                          .from('contacts')
+                          .update({ tags: [...existingTags, action.tag] })
+                          .eq('id', contactId)
+                      }
+                    } else if (action.type === 'send_coupon' && action.coupon_id) {
+                      const { data: coupon } = await supabase
+                        .from('coupons')
+                        .select('code')
+                        .eq('id', action.coupon_id)
+                        .single()
+                      if (coupon?.code) {
+                        const couponUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
+                        const couponFormData = new URLSearchParams()
+                        couponFormData.append('To', normalizedPhone)
+                        couponFormData.append('From', senderNumber)
+                        couponFormData.append('Body', `Voici votre coupon : ${coupon.code}`)
+                        await fetch(couponUrl, {
+                          method: 'POST',
+                          headers: {
+                            'Authorization': `Basic ${auth}`,
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                          },
+                          body: couponFormData.toString(),
+                        })
+                      }
+                    }
+                  }
+                }
 
                 break
               }

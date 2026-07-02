@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS public.coupons (
   per_contact_limit INTEGER DEFAULT 1,
   is_active BOOLEAN DEFAULT true,
   terms TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, code)
 );

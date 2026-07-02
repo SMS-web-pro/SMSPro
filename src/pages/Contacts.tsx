@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Loader2,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -178,6 +179,9 @@ export function ContactsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => refresh()}>
+            Actualiser
+          </Button>
           <Button variant="outline" leftIcon={<Upload className="h-4 w-4" />} onClick={() => setShowImportModal(true)}>
             Importer CSV
           </Button>
